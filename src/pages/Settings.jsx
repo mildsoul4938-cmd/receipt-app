@@ -2,28 +2,32 @@ import { useState } from 'react'
 import { useApp } from '../context/AppContext.jsx'
 import { initGoogleAuth, requestGoogleToken, revokeToken } from '../services/googleApi.js'
 
-function waitForGoogle(timeout = 20000) {
+function loadGIS() {
   return new Promise((resolve, reject) => {
+    // 이미 로드된 경우
     if (window.google?.accounts) return resolve()
 
-    // 스크립트가 아직 없으면 동적으로 추가
-    if (!document.querySelector('script[src*="accounts.google.com/gsi/client"]')) {
-      const script = document.createElement('script')
-      script.src = 'https://accounts.google.com/gsi/client'
-      script.async = true
-      document.head.appendChild(script)
+    // 새 스크립트 태그로 동적 로드 (onload/onerror 로 정확히 감지)
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+
+    const timer = setTimeout(() => {
+      script.remove()
+      reject(new Error('Google 서비스 연결 시간 초과. 인터넷 연결을 확인해주세요.'))
+    }, 30000)
+
+    script.onload = () => {
+      clearTimeout(timer)
+      if (window.google?.accounts) resolve()
+      else reject(new Error('Google 라이브러리 초기화 실패. 페이지를 새로고침해주세요.'))
+    }
+    script.onerror = () => {
+      clearTimeout(timer)
+      script.remove()
+      reject(new Error('Google 서비스를 불러올 수 없습니다. 인터넷 연결을 확인해주세요.'))
     }
 
-    const start = Date.now()
-    const interval = setInterval(() => {
-      if (window.google?.accounts) {
-        clearInterval(interval)
-        resolve()
-      } else if (Date.now() - start > timeout) {
-        clearInterval(interval)
-        reject(new Error('Google 라이브러리 로딩 실패. 페이지를 새로고침 후 다시 시도해주세요.'))
-      }
-    }, 200)
+    document.head.appendChild(script)
   })
 }
 
@@ -45,7 +49,7 @@ export default function Settings() {
     }
     setConnecting(true)
     try {
-      await waitForGoogle()
+      await loadGIS()
       if (clientId) updateSettings({ clientId })
       initGoogleAuth(effectiveClientId)
       const token = await requestGoogleToken()
