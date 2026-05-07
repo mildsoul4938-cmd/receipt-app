@@ -116,6 +116,11 @@ export default function Capture() {
           border: '1px solid rgba(220,38,38,0.3)', borderRadius: 14, padding: '12px 16px',
           color: '#fca5a5', fontSize: 13 }}>
           ⚠️ 인식 실패 — 다음 화면에서 직접 입력하세요
+          {errorMsg && (
+            <div style={{ marginTop: 6, fontSize: 11, color: '#fca5a5', opacity: 0.8, wordBreak: 'break-all' }}>
+              ({errorMsg})
+            </div>
+          )}
         </div>
       )}
 
