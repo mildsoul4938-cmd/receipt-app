@@ -174,6 +174,12 @@ function extractMerchant(lines) {
     // 주소/사업자/영수증 관련 키워드
     if (/주\s*소|사업자|등록번호|영수증|receipt|합계|금액|부가세|vat|결제|승인|날짜|일시|거래|시간|카드|승인/i.test(line)) return true
 
+    // 대기번호, 주문번호, 테이블번호 등 번호 키워드
+    if (/대기\s*번호|주문\s*번호|테이블|table|order\s*no|receipt\s*no|영수증\s*번호/i.test(line)) return true
+
+    // 콜론 두 개 패턴 (대기번호:: 031 등)
+    if (/::/.test(line)) return true
+
     // 이메일
     if (/[a-z0-9._%+\-]+@/i.test(line)) return true
 
@@ -197,9 +203,9 @@ function extractMerchant(lines) {
     return line
   }
 
-  // 1) 가맹점 키워드 뒤에 오는 값 우선
+  // 1) 가맹점 키워드 뒤에 오는 값 우선 (공백 포함 패턴: "점 포 명", "상 호" 등)
   for (const line of lines) {
-    const m = line.match(/(?:가맹점|상\s*호|점\s*명|사업장|상점명)\s*[：:]\s*(.+)/)
+    const m = line.match(/(?:가\s*맹\s*점|상\s*호|점\s*포\s*명|점\s*명|사\s*업\s*장|상\s*점\s*명|업\s*체\s*명)\s*[：:]\s*(.+)/)
     if (m && m[1].trim().length >= 2) return m[1].trim().slice(0, 25)
   }
 

@@ -2,9 +2,18 @@ import { useState } from 'react'
 import { useApp } from '../context/AppContext.jsx'
 import { initGoogleAuth, requestGoogleToken, revokeToken } from '../services/googleApi.js'
 
-function waitForGoogle(timeout = 10000) {
+function waitForGoogle(timeout = 20000) {
   return new Promise((resolve, reject) => {
     if (window.google?.accounts) return resolve()
+
+    // 스크립트가 아직 없으면 동적으로 추가
+    if (!document.querySelector('script[src*="accounts.google.com/gsi/client"]')) {
+      const script = document.createElement('script')
+      script.src = 'https://accounts.google.com/gsi/client'
+      script.async = true
+      document.head.appendChild(script)
+    }
+
     const start = Date.now()
     const interval = setInterval(() => {
       if (window.google?.accounts) {
@@ -12,7 +21,7 @@ function waitForGoogle(timeout = 10000) {
         resolve()
       } else if (Date.now() - start > timeout) {
         clearInterval(interval)
-        reject(new Error('Google 라이브러리 로딩 실패. 페이지를 새로고침 해주세요.'))
+        reject(new Error('Google 라이브러리 로딩 실패. 페이지를 새로고침 후 다시 시도해주세요.'))
       }
     }, 200)
   })
