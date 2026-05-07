@@ -205,7 +205,7 @@ function extractMerchant(lines) {
 
   // 1) 가맹점 키워드 뒤에 오는 값 우선 (공백 포함 패턴: "점 포 명", "상 호" 등)
   for (const line of lines) {
-    const m = line.match(/(?:가\s*맹\s*점|상\s*호|점\s*포\s*명|점\s*명|사\s*업\s*장|상\s*점\s*명|업\s*체\s*명)\s*[：:]\s*(.+)/)
+    const m = line.match(/(?:가\s*맹\s*점|상\s*호|점\s*포\s*명|점\s*명|포\s*명|업\s*체\s*명|상\s*점\s*명|사\s*업\s*장|사\s*업\s*체)\s*[：:]\s*(.+)/)
     if (m && m[1].trim().length >= 2) return m[1].trim().slice(0, 25)
   }
 
