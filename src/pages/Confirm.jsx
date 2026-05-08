@@ -6,6 +6,29 @@ import {
   getOrCreateSpreadsheet, appendReceiptRow, uploadReceiptImage
 } from '../services/googleApi.js'
 
+function loadGIS() {
+  return new Promise((resolve, reject) => {
+    if (window.google?.accounts) return resolve()
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    const timer = setTimeout(() => {
+      script.remove()
+      reject(new Error('Google 서비스 연결 시간 초과'))
+    }, 30000)
+    script.onload = () => {
+      clearTimeout(timer)
+      if (window.google?.accounts) resolve()
+      else reject(new Error('Google 라이브러리 초기화 실패'))
+    }
+    script.onerror = () => {
+      clearTimeout(timer)
+      script.remove()
+      reject(new Error('Google 서비스를 불러올 수 없습니다'))
+    }
+    document.head.appendChild(script)
+  })
+}
+
 const CATEGORIES = ['식비', '교통', '접대비', '숙박', '소모품', '기타']
 const CAT_EMOJI  = { '식비':'🍽️','교통':'🚕','접대비':'🤝','숙박':'🏨','소모품':'📦','기타':'📄' }
 
@@ -42,26 +65,50 @@ export default function Confirm() {
     if (clientId || googleToken) {
       try {
         let token = googleToken
-        if (!token) {
+
+        // 토큰 없거나 만료됐으면 재인증
+        const needAuth = !token
+        if (needAuth) {
           setStep('Google 로그인 중...')
+          await loadGIS()
           initGoogleAuth(clientId)
           token = await requestGoogleToken()
           setGoogleToken(token)
         }
 
-        setStep('이미지 Drive에 저장 중...')
-        let imageUrl = ''
-        if (image) imageUrl = await uploadReceiptImage(token, image, receipt)
+        const doUpload = async (t) => {
+          setStep('이미지 Drive에 저장 중...')
+          let imageUrl = ''
+          if (image) imageUrl = await uploadReceiptImage(t, image, receipt)
 
-        setStep('Google Sheets에 기록 중...')
-        const year = form.date.split('-')[0]
-        const ssId = await getOrCreateSpreadsheet(token, year)
-        await appendReceiptRow(token, ssId, { ...receipt, imageUrl })
+          setStep('Google Sheets에 기록 중...')
+          const year = form.date.split('-')[0]
+          const ssId = await getOrCreateSpreadsheet(t, year)
+          await appendReceiptRow(t, ssId, { ...receipt, imageUrl })
+          return imageUrl
+        }
+
+        let imageUrl
+        try {
+          imageUrl = await doUpload(token)
+        } catch (e) {
+          // 401이면 토큰 만료 → 재인증 후 재시도
+          if (e.message.includes('401') || e.message.includes('Invalid Credentials') || e.message.includes('UNAUTHENTICATED')) {
+            setStep('토큰 갱신 중...')
+            await loadGIS()
+            initGoogleAuth(clientId)
+            token = await requestGoogleToken()
+            setGoogleToken(token)
+            imageUrl = await doUpload(token)
+          } else {
+            throw e
+          }
+        }
 
         updateReceipt(receipt.id, { synced: true, imageUrl })
         showToast('☁️ Drive & Sheets 저장 완료!', 'success')
       } catch (e) {
-        showToast(`Drive 저장 실패: ${e.message}`, 'error')
+        showToast(`저장 실패: ${e.message}`, 'error')
       }
     } else {
       showToast('로컬에 저장됐습니다', 'default')

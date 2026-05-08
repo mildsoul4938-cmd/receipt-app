@@ -93,7 +93,10 @@ export async function uploadReceiptImage(token, base64DataUrl, receipt) {
     'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',
     { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }
   )
-  if (!res.ok) throw new Error('이미지 업로드 실패')
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}))
+    throw new Error(e.error?.message || `Drive 업로드 실패 (${res.status})`)
+  }
   const data = await res.json()
   return data.webViewLink || ''
 }
