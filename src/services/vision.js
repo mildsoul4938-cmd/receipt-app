@@ -228,6 +228,12 @@ function extractMerchant(lines) {
     if (m && m[1].trim().length >= 1) return m[1].trim().slice(0, 25)
   }
 
+  // 1-b) OCR이 "상 호" → "상" + "호:값" 두 줄로 쪼갠 경우
+  for (const line of lines) {
+    const m = line.match(/^호\s*[：:]\s*(.+)/)
+    if (m && m[1].trim().length >= 1) return m[1].trim().slice(0, 25)
+  }
+
   // 2) 노이즈 아닌 첫 번째 의미있는 줄
   for (const line of lines.slice(0, 20)) {
     if (!isNoise(line)) return normalizeBrand(line).slice(0, 25)
