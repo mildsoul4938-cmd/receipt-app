@@ -59,69 +59,83 @@ function korDate(dateStr) {
   return `${y}년 ${m}월 ${d}일`
 }
 
-const BD = { style: 'SOLID', width: 1, color: { red: 0.75, green: 0.75, blue: 0.75 } }
+// ── 열 인덱스 → 알파벳 (0=A, 1=B, 26=AA …)
+function colLetter(idx) {
+  let s = '', i = idx + 1
+  while (i > 0) { i--; s = String.fromCharCode(65 + i % 26) + s; i = Math.floor(i / 26) }
+  return s
+}
 
+const BD  = { style: 'SOLID', width: 1, color: { red: 0.75, green: 0.75, blue: 0.75 } }
+const GRN = { red: 0.851, green: 0.918, blue: 0.827 }
+
+/*
+ * 레이아웃: 영수증 한 건 = 열(column) 하나
+ *   A열   : 레이블 (날짜 / 분류 / 사용내역 / 금액 / 영수증)
+ *   B열~  : 영수증 데이터 (날짜 위→영수증사진 아래)
+ *
+ *       A          B               C
+ *  1  날짜    2026년 1월 2일   2026년 1월 5일
+ *  2  분류    식사             사무 장비
+ *  3  사용내역 식권 구입        사무 용품 구입
+ *  4  금액    ₩80,000         ₩59,200
+ *  5  영수증  (사진)           (사진)
+ */
 export async function appendReceiptRow(token, spreadsheetId, receipt) {
-  const sheetName = receipt.date.slice(0, 7).replace('-', '_') // "2026_05"
+  const sheetName = receipt.date.slice(0, 7).replace('-', '_')
   const sheetId   = await ensureMonthSheet(token, spreadsheetId, sheetName)
 
+  // 1행(날짜 행) 읽어서 다음 빈 열 결정
+  const r1    = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!1:1`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+  const r1d   = await r1.json()
+  const colIdx = r1d.values?.[0]?.length ?? 1  // A=0 이미 레이블, B=1 부터 데이터
+  const col    = colLetter(colIdx)
+
   const detail  = receipt.memo ? `${receipt.merchant} - ${receipt.memo}` : receipt.merchant
-  // mode 2 = 비율 유지하며 셀에 맞게 축소
   const imgCell = receipt.imageUrl ? `=IMAGE("${receipt.imageUrl}",2)` : ''
 
-  await gRequest(token, 'POST',
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append?valueInputOption=USER_ENTERED`,
-    { values: [[korDate(receipt.date), receipt.category, detail, receipt.amount, imgCell]] }
+  // 세로(열)로 5개 값 기록
+  await gRequest(token, 'PUT',
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!${col}1:${col}5?valueInputOption=USER_ENTERED`,
+    {
+      range: `${sheetName}!${col}1:${col}5`,
+      majorDimension: 'COLUMNS',
+      values: [[korDate(receipt.date), receipt.category, detail, receipt.amount, imgCell]]
+    }
   )
 
-  // 방금 추가한 행 스타일 적용
+  // 새 열 서식
   if (sheetId !== null) {
     try {
-      const rng     = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      const rngData = await rng.json()
-      const rowIdx  = (rngData.values?.length ?? 2) - 1 // 0-based
-
       await gRequest(token, 'POST', `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
         requests: [
-          // 행 높이 (이미지 240px / 텍스트만 40px)
-          {
-            updateDimensionProperties: {
-              range: { sheetId, dimension: 'ROWS', startIndex: rowIdx, endIndex: rowIdx + 1 },
-              properties: { pixelSize: receipt.imageUrl ? 240 : 40 },
-              fields: 'pixelSize'
-            }
-          },
+          // 열 너비 150px
+          { updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: colIdx, endIndex: colIdx + 1 }, properties: { pixelSize: 150 }, fields: 'pixelSize' } },
           // 상하좌우 가운데 정렬
           {
             repeatCell: {
-              range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1 },
-              cell: {
-                userEnteredFormat: {
-                  horizontalAlignment: 'CENTER',
-                  verticalAlignment:   'MIDDLE',
-                  wrapStrategy:        'CLIP',
-                }
-              },
-              fields: 'userEnteredFormat(horizontalAlignment,verticalAlignment,wrapStrategy)'
+              range: { sheetId, startRowIndex: 0, endRowIndex: 5, startColumnIndex: colIdx, endColumnIndex: colIdx + 1 },
+              cell: { userEnteredFormat: { horizontalAlignment: 'CENTER', verticalAlignment: 'MIDDLE' } },
+              fields: 'userEnteredFormat(horizontalAlignment,verticalAlignment)'
             }
           },
           // 테두리
           {
             updateBorders: {
-              range: { sheetId, startRowIndex: rowIdx, endRowIndex: rowIdx + 1, startColumnIndex: 0, endColumnIndex: 5 },
-              top: BD, bottom: BD, left: BD, right: BD, innerVertical: BD
+              range: { sheetId, startRowIndex: 0, endRowIndex: 5, startColumnIndex: colIdx, endColumnIndex: colIdx + 1 },
+              top: BD, bottom: BD, left: BD, right: BD, innerHorizontal: BD
             }
           }
         ]
       })
-    } catch { /* 스타일 실패는 무시 */ }
+    } catch { /* 서식 실패 무시 */ }
   }
 }
 
-// 시트 없으면 생성 + 헤더 + 서식, sheetId 반환
+// 시트가 없으면 생성 + A열 레이블 + 기본 서식 설정
 async function ensureMonthSheet(token, spreadsheetId, sheetName) {
   const r    = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
     { headers: { Authorization: `Bearer ${token}` } })
@@ -134,71 +148,46 @@ async function ensureMonthSheet(token, spreadsheetId, sheetName) {
     { requests: [{ addSheet: { properties: { title: sheetName } } }] })
   const newSheetId = res.replies?.[0]?.addSheet?.properties?.sheetId ?? null
 
-  // 헤더 데이터
-  await gRequest(token, 'POST',
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:append?valueInputOption=USER_ENTERED`,
-    { values: [['날짜', '분류', '사용내역', '금액', '영수증']] }
+  // A열 레이블 (세로)
+  await gRequest(token, 'PUT',
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:A5?valueInputOption=USER_ENTERED`,
+    { range: `${sheetName}!A1:A5`, majorDimension: 'COLUMNS', values: [['날짜', '분류', '사용내역', '금액', '영수증']] }
   )
 
   if (newSheetId !== null) {
     try {
       await gRequest(token, 'POST', `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
         requests: [
-          // ① 전체 셀 기본 정렬 (상하좌우 가운데)
+          // 전체 셀 가운데 정렬
+          { repeatCell: { range: { sheetId: newSheetId }, cell: { userEnteredFormat: { horizontalAlignment: 'CENTER', verticalAlignment: 'MIDDLE' } }, fields: 'userEnteredFormat(horizontalAlignment,verticalAlignment)' } },
+          // A열 레이블: 굵게 + 연두 배경
           {
             repeatCell: {
-              range: { sheetId: newSheetId },
-              cell: { userEnteredFormat: { horizontalAlignment: 'CENTER', verticalAlignment: 'MIDDLE' } },
-              fields: 'userEnteredFormat(horizontalAlignment,verticalAlignment)'
-            }
-          },
-          // ② 헤더 행: 굵게 + 연두 배경 + 가운데
-          {
-            repeatCell: {
-              range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 1 },
-              cell: {
-                userEnteredFormat: {
-                  backgroundColor:     { red: 0.851, green: 0.918, blue: 0.827 },
-                  textFormat:          { bold: true, fontSize: 10 },
-                  horizontalAlignment: 'CENTER',
-                  verticalAlignment:   'MIDDLE',
-                }
-              },
+              range: { sheetId: newSheetId, startColumnIndex: 0, endColumnIndex: 1 },
+              cell: { userEnteredFormat: { backgroundColor: GRN, textFormat: { bold: true, fontSize: 10 }, horizontalAlignment: 'CENTER', verticalAlignment: 'MIDDLE' } },
               fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)'
             }
           },
-          // ③ 헤더 행 높이 32px
-          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'ROWS',    startIndex: 0, endIndex: 1 }, properties: { pixelSize: 32  }, fields: 'pixelSize' } },
-          // ④ 헤더 테두리
-          {
-            updateBorders: {
-              range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 5 },
-              top: BD, bottom: BD, left: BD, right: BD, innerVertical: BD
-            }
-          },
-          // ⑤ 열 너비
-          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 }, properties: { pixelSize: 120 }, fields: 'pixelSize' } }, // 날짜
-          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 1, endIndex: 2 }, properties: { pixelSize: 100 }, fields: 'pixelSize' } }, // 분류
-          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 2, endIndex: 3 }, properties: { pixelSize: 190 }, fields: 'pixelSize' } }, // 사용내역
-          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 3, endIndex: 4 }, properties: { pixelSize: 100 }, fields: 'pixelSize' } }, // 금액
-          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 4, endIndex: 5 }, properties: { pixelSize: 210 }, fields: 'pixelSize' } }, // 영수증
-          // ⑥ 분류 열 드롭다운
+          // A열 테두리
+          { updateBorders: { range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 5, startColumnIndex: 0, endColumnIndex: 1 }, top: BD, bottom: BD, left: BD, right: BD, innerHorizontal: BD } },
+          // A열 너비 90px
+          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 }, properties: { pixelSize: 90 }, fields: 'pixelSize' } },
+          // 행 1~4: 32px / 행 5(영수증): 240px
+          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'ROWS', startIndex: 0, endIndex: 4 }, properties: { pixelSize: 32  }, fields: 'pixelSize' } },
+          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'ROWS', startIndex: 4, endIndex: 5 }, properties: { pixelSize: 240 }, fields: 'pixelSize' } },
+          // 분류 행(2행, index 1) B열 이후 드롭다운
           {
             setDataValidation: {
-              range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: 500, startColumnIndex: 1, endColumnIndex: 2 },
+              range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: 2, startColumnIndex: 1, endColumnIndex: 100 },
               rule: {
-                condition: {
-                  type: 'ONE_OF_LIST',
-                  values: ['식비','교통','접대비','숙박','소모품','통신/IT','의료비','기타'].map(v => ({ userEnteredValue: v }))
-                },
-                showCustomUi: true,
-                strict: false
+                condition: { type: 'ONE_OF_LIST', values: ['식비','교통','접대비','숙박','소모품','통신/IT','의료비','기타'].map(v => ({ userEnteredValue: v })) },
+                showCustomUi: true, strict: false
               }
             }
-          },
+          }
         ]
       })
-    } catch { /* 스타일 실패는 무시 */ }
+    } catch { /* 서식 실패 무시 */ }
   }
 
   return newSheetId
