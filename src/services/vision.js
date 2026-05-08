@@ -75,11 +75,12 @@ function extractAmount(lines, rawText) {
     return null
   }
 
-  // 1) 합계 계열 금액
-  const totalAmt = findByKeyword(/합\s*계|총\s*액|total/i)
+  // 1) 합계 계열 금액  ("총 계:" / "합 계:" / "총 액:" 모두 처리)
+  const totalAmt = findByKeyword(/합\s*계|총\s*계|총\s*액|total/i)
 
   // 2) 실제 결제(카드/현금) 금액
-  const paidAmt = findByKeyword(/결제\s*금액|실\s*결제|승인\s*금액|청구\s*금액|받을\s*금액|내야\s*할\s*금액|카\s*드\s*매\s*출|카\s*드\s*금액/i)
+  //    "카 드:" 단독 줄은 결제금액, "카드 NO:" 줄은 제외
+  const paidAmt = findByKeyword(/결제\s*금액|실\s*결제|승인\s*금액|청구\s*금액|받을\s*금액|내야\s*할\s*금액|카\s*드\s*매\s*출|카\s*드\s*금액|^카\s*드\s*[：:](?!\s*N)/im)
 
   // 3) 크로스체크: 둘 다 있으면 비교
   if (totalAmt && paidAmt) {
@@ -114,11 +115,12 @@ function extractAmount(lines, rawText) {
 function extractNumbers(line) {
   // 전화번호 패턴, 날짜, 시간, 카드번호, 승인번호 등 제거 후 숫자 추출
   const cleaned = line
-    .replace(/\d{2,4}[-\s]\d{3,4}[-\s]\d{4}/g, '')   // 전화번호 (02-3467-4530)
+    .replace(/\d{2,4}[-\s]\d{3,4}[-\s]\d{4}/g, '')        // 전화번호 (02-3467-4530)
     .replace(/\d{4}[-\s]\d{2,4}[-\s]\d{4}[-\s\*\d]+/g, '') // 카드번호 (5585-26**-****)
-    .replace(/\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2}/g, '') // 날짜 (2026-03-06)
-    .replace(/\d{1,2}:\d{2}:\d{2}/g, '')               // 시간 (13:09:45)
-    .replace(/\b\d{7,}\b/g, '')                        // 8자리 이상 승인번호 등
+    .replace(/\d+[\*]+[\d\*]*/g, '')                       // 카드번호 (558526***** 별표형)
+    .replace(/\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2}/g, '')    // 날짜 (2026-03-06)
+    .replace(/\d{1,2}:\d{2}:\d{2}/g, '')                  // 시간 (13:09:45)
+    .replace(/\b\d{7,}\b/g, '')                            // 8자리 이상 승인번호 등
 
   return [...cleaned.matchAll(/[0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,7}/g)]
     .map(m => parseInt(m[0].replace(/,/g, '')))
@@ -182,6 +184,13 @@ function extractMerchant(lines) {
     // 주소/사업자/영수증 관련 키워드
     if (/주\s*소|사업자|등록번호|영수증|receipt|합계|금액|부가세|vat|결제|승인|날짜|일시|거래|시간|카드|승인/i.test(line)) return true
 
+    // OCR이 영수증 헤더 레이블만 합쳐서 읽는 경우 (예: "상대전주상", "상호대표전화")
+    if (/^[상대전주사]/.test(line) && line.length <= 8 && !/\d/.test(line) &&
+        /상|대표|전화|주소/.test(line)) return true
+
+    // "상 호:" "대 표:" "전 화:" 등 레이블 줄 (값이 없거나 1글자인 경우 노이즈)
+    if (/^(상\s*호|대\s*표|전\s*화|주\s*소)\s*[：:]/.test(line)) return true
+
     // 대기번호, 주문번호, 테이블번호 등 번호 키워드
     if (/대기\s*번호|주문\s*번호|테이블|table|order\s*no|receipt\s*no|영수증\s*번호/i.test(line)) return true
 
@@ -214,11 +223,11 @@ function extractMerchant(lines) {
   // 1) 가맹점 키워드 뒤에 오는 값 우선 (공백 포함 패턴: "점 포 명", "상 호" 등)
   for (const line of lines) {
     const m = line.match(/(?:가\s*맹\s*점|상\s*호|점\s*포\s*명|점\s*명|포\s*명|업\s*체\s*명|상\s*점\s*명|사\s*업\s*장|사\s*업\s*체)\s*[：:]\s*(.+)/)
-    if (m && m[1].trim().length >= 2) return m[1].trim().slice(0, 25)
+    if (m && m[1].trim().length >= 1) return m[1].trim().slice(0, 25)
   }
 
   // 2) 노이즈 아닌 첫 번째 의미있는 줄
-  for (const line of lines.slice(0, 15)) {
+  for (const line of lines.slice(0, 20)) {
     if (!isNoise(line)) return normalizeBrand(line).slice(0, 25)
   }
   return ''
@@ -235,6 +244,9 @@ function detectCategory(text, merchant) {
         // 음식점
         '식당','음식','레스토랑','푸드','한식','중식','일식','양식','분식',
         '삼겹','냉면','김밥','치킨','피자','버거','도시락','순대','곱창',
+        '짜장','짬뽕','짬짜','탕수','만두','볶음밥','복쌈','쌈밥','갈비',
+        '삼계','설렁','해장','국밥','된장','부대찌개','찌개','수제비',
+        '정식','백반','돈까스','우동','라멘','라면','초밥','회','삼겹살',
         // 카페
         '카페','커피','스타벅스','투썸','이디야','맥도날드','롯데리아',
         '버거킹','kfc','서브웨이','빽다방','메가커피','컴포즈','공차',
