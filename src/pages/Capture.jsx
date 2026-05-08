@@ -108,6 +108,12 @@ export default function Capture() {
             <InfoRow label="날짜" value={result.date} />
             <InfoRow label="카테고리" value={result.category} />
           </div>
+          {result.rawText && (
+            <details style={{ marginTop: 10 }}>
+              <summary style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}>🔍 OCR 원문 보기</summary>
+              <pre style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)', whiteSpace: 'pre-wrap', marginTop: 6, maxHeight: 120, overflow: 'auto' }}>{result.rawText}</pre>
+            </details>
+          )}
         </div>
       )}
 
