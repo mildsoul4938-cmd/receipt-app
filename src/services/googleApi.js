@@ -53,29 +53,103 @@ async function verifySpreadsheet(token, id) {
   } catch { return false }
 }
 
+// "2026-01-05" → "2026년 1월 5일"
+function korDate(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return `${y}년 ${m}월 ${d}일`
+}
+
 export async function appendReceiptRow(token, spreadsheetId, receipt) {
   const sheetName = receipt.date.slice(0, 7).replace('-', '_') // "2026_05"
-  await ensureMonthSheet(token, spreadsheetId, sheetName)
+  const sheetIndex = await ensureMonthSheet(token, spreadsheetId, sheetName)
+
+  // 사용내역: 메모 있으면 "가맹점 - 메모", 없으면 가맹점명
+  const detail = receipt.memo ? `${receipt.merchant} - ${receipt.memo}` : receipt.merchant
+
+  // 영수증: =IMAGE() 공개 URL이면 셀 내 이미지, 아니면 빈칸
+  const imgCell = receipt.imageUrl ? `=IMAGE("${receipt.imageUrl}")` : ''
 
   await gRequest(token, 'POST',
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append?valueInputOption=USER_ENTERED`,
-    { values: [[receipt.id, receipt.date, receipt.merchant, receipt.amount, receipt.category, receipt.memo || '', receipt.imageUrl || '', new Date().toLocaleString('ko-KR')]] }
+    { values: [[korDate(receipt.date), receipt.category, detail, receipt.amount, imgCell]] }
   )
+
+  // 영수증 열 행 높이를 120px로 확대 (이미지 보이게)
+  if (receipt.imageUrl && sheetIndex !== null) {
+    try {
+      // 방금 추가한 행 번호 파악
+      const rng = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const rngData = await rng.json()
+      const rowIdx = (rngData.values?.length ?? 2) - 1 // 0-based (헤더=0)
+
+      await gRequest(token, 'POST', `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        requests: [{
+          updateDimensionProperties: {
+            range: { sheetId: sheetIndex, dimension: 'ROWS', startIndex: rowIdx, endIndex: rowIdx + 1 },
+            properties: { pixelSize: 120 },
+            fields: 'pixelSize'
+          }
+        }]
+      })
+    } catch { /* 행 높이 실패는 무시 */ }
+  }
 }
 
+// 시트가 없으면 생성 후 헤더 추가, sheetId 반환
 async function ensureMonthSheet(token, spreadsheetId, sheetName) {
-  const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`,
+  const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties`,
     { headers: { Authorization: `Bearer ${token}` } })
   const data = await r.json()
-  if (data.sheets?.some(s => s.properties.title === sheetName)) return
+  const existing = data.sheets?.find(s => s.properties.title === sheetName)
+  if (existing) return existing.properties.sheetId
 
-  await gRequest(token, 'POST', `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+  const res = await gRequest(token, 'POST', `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
     { requests: [{ addSheet: { properties: { title: sheetName } } }] })
+  const newSheetId = res.replies?.[0]?.addSheet?.properties?.sheetId ?? null
 
+  // 헤더 행
   await gRequest(token, 'POST',
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:append?valueInputOption=USER_ENTERED`,
-    { values: [['ID', '날짜', '가맹점', '금액(원)', '카테고리', '메모', '영수증사진', '등록일시']] }
+    { values: [['날짜', '분류', '사용내역', '금액', '영수증']] }
   )
+
+  // 헤더 스타일: 굵게 + 배경색 + 열 너비
+  if (newSheetId !== null) {
+    try {
+      await gRequest(token, 'POST', `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        requests: [
+          // 헤더 굵게 + 배경
+          {
+            repeatCell: {
+              range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 1 },
+              cell: {
+                userEnteredFormat: {
+                  textFormat: { bold: true },
+                  backgroundColor: { red: 0.851, green: 0.918, blue: 0.827 }
+                }
+              },
+              fields: 'userEnteredFormat(textFormat,backgroundColor)'
+            }
+          },
+          // 날짜 열 너비 130
+          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 }, properties: { pixelSize: 130 }, fields: 'pixelSize' } },
+          // 분류 열 너비 110
+          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 1, endIndex: 2 }, properties: { pixelSize: 110 }, fields: 'pixelSize' } },
+          // 사용내역 열 너비 200
+          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 2, endIndex: 3 }, properties: { pixelSize: 200 }, fields: 'pixelSize' } },
+          // 금액 열 너비 110
+          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 3, endIndex: 4 }, properties: { pixelSize: 110 }, fields: 'pixelSize' } },
+          // 영수증 열 너비 160
+          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 4, endIndex: 5 }, properties: { pixelSize: 160 }, fields: 'pixelSize' } },
+        ]
+      })
+    } catch { /* 스타일 실패는 무시 */ }
+  }
+
+  return newSheetId
 }
 
 // ── Drive ─────────────────────────────────────────────────────────────────
@@ -100,7 +174,19 @@ export async function uploadReceiptImage(token, base64DataUrl, receipt) {
     throw new Error(e.error?.message || `Drive 업로드 실패 (${res.status})`)
   }
   const data = await res.json()
-  return data.webViewLink || ''
+  const fileId = data.id
+
+  // Sheets =IMAGE() 수식이 작동하려면 공개 읽기 권한 필요
+  try {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'reader', type: 'anyone' })
+    })
+  } catch { /* 권한 설정 실패해도 계속 */ }
+
+  // =IMAGE() 에 사용할 직접 URL
+  return `https://drive.google.com/uc?id=${fileId}`
 }
 
 async function getOrCreateReceiptFolder(token, dateStr) {
