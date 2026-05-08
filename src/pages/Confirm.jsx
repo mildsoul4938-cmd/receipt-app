@@ -47,8 +47,9 @@ export default function Confirm() {
     category: extracted?.category || '식비',
     memo:     ''
   })
-  const [saving, setSaving] = useState(false)
-  const [step,   setStep]   = useState('')
+  const [saving,    setSaving]    = useState(false)
+  const [step,      setStep]      = useState('')
+  const [cloudError, setCloudError] = useState('')
 
   function set(k, v) { setForm(p => ({ ...p, [k]: v })) }
 
@@ -58,6 +59,7 @@ export default function Confirm() {
     if (!amount || amount <= 0) return showToast('금액을 입력해주세요', 'error')
 
     setSaving(true)
+    setCloudError('')
     const receipt = addReceipt({ date: form.date, merchant: form.merchant.trim(), amount, category: form.category, memo: form.memo.trim(), image: image || null })
 
     const clientId = settings.clientId || import.meta.env.VITE_GOOGLE_CLIENT_ID
@@ -66,9 +68,7 @@ export default function Confirm() {
       try {
         let token = googleToken
 
-        // 토큰 없거나 만료됐으면 재인증
-        const needAuth = !token
-        if (needAuth) {
+        if (!token) {
           setStep('Google 로그인 중...')
           await loadGIS()
           initGoogleAuth(clientId)
@@ -77,24 +77,34 @@ export default function Confirm() {
           setGoogleToken(token, auth.expiresIn)
         }
 
-        const doUpload = async (t) => {
+        // ── 토큰으로 업로드 시도, 401이면 재인증 ──────────────────
+        async function tryUpload(t) {
+          // 1) Drive 이미지 업로드 (실패해도 Sheets는 계속 진행)
           setStep('이미지 Drive에 저장 중...')
           let imageUrl = ''
-          if (image) imageUrl = await uploadReceiptImage(t, image, receipt)
+          let driveErr = ''
+          if (image) {
+            try {
+              imageUrl = await uploadReceiptImage(t, image, receipt)
+            } catch (e) {
+              driveErr = e.message
+            }
+          }
 
+          // 2) Sheets 기록 (항상 실행)
           setStep('Google Sheets에 기록 중...')
           const year = form.date.split('-')[0]
           const ssId = await getOrCreateSpreadsheet(t, year)
           await appendReceiptRow(t, ssId, { ...receipt, imageUrl })
-          return imageUrl
+
+          return { imageUrl, driveErr }
         }
 
-        let imageUrl
+        let result
         try {
-          imageUrl = await doUpload(token)
+          result = await tryUpload(token)
         } catch (e) {
-          // 401 / 토큰 만료 → 재인증 후 재시도
-          const expired = e.message.includes('401') || e.message.includes('Invalid Credentials') || e.message.includes('UNAUTHENTICATED') || e.message.includes('invalid_token')
+          const expired = /401|Invalid Credentials|UNAUTHENTICATED|invalid_token/i.test(e.message)
           if (expired) {
             setStep('토큰 갱신 중...')
             await loadGIS()
@@ -102,16 +112,26 @@ export default function Confirm() {
             const reauth = await requestGoogleToken()
             token = reauth.token
             setGoogleToken(token, reauth.expiresIn)
-            imageUrl = await doUpload(token)
+            result = await tryUpload(token)
           } else {
             throw e
           }
         }
 
-        updateReceipt(receipt.id, { synced: true, imageUrl })
+        updateReceipt(receipt.id, { synced: true, imageUrl: result.imageUrl })
+
+        if (result.driveErr) {
+          // Sheets는 성공, Drive만 실패
+          setCloudError(`Drive 업로드 실패: ${result.driveErr}`)
+          setSaving(false); setStep('')
+          return   // 페이지 이동 안 함 — 에러 화면에 표시
+        }
         showToast('☁️ Drive & Sheets 저장 완료!', 'success')
+
       } catch (e) {
-        showToast(`저장 실패: ${e.message}`, 'error')
+        setCloudError(`저장 실패: ${e.message}`)
+        setSaving(false); setStep('')
+        return
       }
     } else {
       showToast('로컬에 저장됐습니다', 'default')
@@ -183,6 +203,24 @@ export default function Confirm() {
               style={{ background: 'none', border: 'none', color: '#d97706', fontWeight: 700, cursor: 'pointer', fontSize: 12, marginLeft: 4 }}>
               설정 →
             </button>
+          </div>
+        )}
+
+        {/* ── 클라우드 오류 표시 (사라지지 않고 화면에 유지) ── */}
+        {cloudError && (
+          <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 12, padding: '14px 16px' }}>
+            <div style={{ fontWeight: 700, color: '#dc2626', fontSize: 13, marginBottom: 6 }}>⚠️ 업로드 오류</div>
+            <div style={{ fontSize: 12, color: '#7f1d1d', wordBreak: 'break-all', lineHeight: 1.6 }}>{cloudError}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button onClick={() => { setCloudError(''); handleSave() }}
+                style={{ flex: 1, padding: '9px 0', background: '#dc2626', border: 'none', borderRadius: 8, color: 'white', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                재시도
+              </button>
+              <button onClick={() => { setCloudError(''); navigate('/', { replace: true }) }}
+                style={{ flex: 1, padding: '9px 0', background: '#f3f4f6', border: 'none', borderRadius: 8, color: '#374151', fontSize: 13, cursor: 'pointer' }}>
+                로컬 저장만
+              </button>
+            </div>
           </div>
         )}
 

@@ -166,8 +166,10 @@ function extractMerchant(lines) {
     // 글자 사이 공백이 많은 헤더 ("현 금 영 수 증", "영 수 증" 등)
     if (/^([가-힣a-z]\s){2,}/i.test(line)) return true
 
-    // 영수증 유형 헤더
-    if (/영\s*수\s*증|현\s*금\s*영\s*수|customer\s*copy|merchant\s*copy|간이\s*영수|세금\s*계산/i.test(line)) return true
+    // 영수증 유형 헤더 (부분 OCR 포함: "수증", "영수" 등)
+    if (/영\s*수\s*증|수\s*증|영\s*수|현\s*금\s*영\s*수|customer\s*copy|merchant\s*copy|간이\s*영수|세금\s*계산/i.test(line)) return true
+    // 고객용/가맹점용 표기
+    if (/고\s*객\s*용|가\s*맹\s*점\s*용|merchant\s*copy|customer\s*copy/i.test(line)) return true
 
     // 특수문자로 시작하거나 감싸인 줄
     if (/^[\[\]\*\=\-\#\{\}\/\\|_~<>]/.test(line)) return true
