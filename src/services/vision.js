@@ -66,22 +66,19 @@ function extractAmount(lines, rawText) {
   const priorityGroups = [
     /결제\s*금액|실\s*결제|승인\s*금액|청구\s*금액|받을\s*금액|내야\s*할\s*금액/i,
     /합\s*계|총\s*액|total/i,
-    /판매\s*금액|주유\s*금액|거래\s*금액/i,
+    /카\s*드\s*매\s*출|판매\s*금액|주유\s*금액|거래\s*금액/i,
     /소\s*계|subtotal/i,
   ]
 
   for (const pattern of priorityGroups) {
     for (let i = 0; i < lines.length; i++) {
       if (pattern.test(lines[i])) {
-        // 같은 줄에서 숫자 찾기
-        const nums = extractNumbers(lines[i])
-        if (nums.length) return nums[nums.length - 1]
-
-        // 다음 1~2줄에서 숫자 찾기
-        for (let j = i + 1; j <= i + 2 && j < lines.length; j++) {
-          const nextNums = extractNumbers(lines[j])
-          if (nextNums.length) return nextNums[nextNums.length - 1]
+        // 같은 줄 + 앞뒤 5줄 범위에서 숫자 수집 후 최댓값
+        const candidates = []
+        for (let j = i; j <= i + 5 && j < lines.length; j++) {
+          candidates.push(...extractNumbers(lines[j]))
         }
+        if (candidates.length) return Math.max(...candidates)
       }
     }
   }
@@ -111,10 +108,17 @@ function extractAmount(lines, rawText) {
 }
 
 function extractNumbers(line) {
-  // 쉼표 포함 숫자(1,000 이상) 또는 4~8자리 연속 숫자
-  return [...line.matchAll(/[0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,8}/g)]
+  // 전화번호 패턴, 날짜, 시간, 카드번호, 승인번호 등 제거 후 숫자 추출
+  const cleaned = line
+    .replace(/\d{2,4}[-\s]\d{3,4}[-\s]\d{4}/g, '')   // 전화번호 (02-3467-4530)
+    .replace(/\d{4}[-\s]\d{2,4}[-\s]\d{4}[-\s\*\d]+/g, '') // 카드번호 (5585-26**-****)
+    .replace(/\d{4}[.\-\/]\d{1,2}[.\-\/]\d{1,2}/g, '') // 날짜 (2026-03-06)
+    .replace(/\d{1,2}:\d{2}:\d{2}/g, '')               // 시간 (13:09:45)
+    .replace(/\b\d{7,}\b/g, '')                        // 8자리 이상 승인번호 등
+
+  return [...cleaned.matchAll(/[0-9]{1,3}(?:,[0-9]{3})+|[0-9]{4,7}/g)]
     .map(m => parseInt(m[0].replace(/,/g, '')))
-    .filter(n => n >= 100 && n <= 10_000_000)
+    .filter(n => n >= 1000 && n <= 10_000_000)
 }
 
 // ── 날짜 추출 ─────────────────────────────────────────────────────────────
