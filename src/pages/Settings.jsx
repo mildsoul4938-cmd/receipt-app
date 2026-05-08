@@ -32,7 +32,7 @@ function loadGIS() {
 }
 
 export default function Settings() {
-  const { settings, updateSettings, googleToken, setGoogleToken, showToast } = useApp()
+  const { settings, updateSettings, googleToken, setGoogleToken, tokenExpiresInMin, showToast } = useApp()
 
   const builtInClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
   const [clientId, setClientId] = useState(settings.clientId || '')
@@ -52,8 +52,8 @@ export default function Settings() {
       await loadGIS()
       if (clientId) updateSettings({ clientId })
       initGoogleAuth(effectiveClientId)
-      const token = await requestGoogleToken()
-      setGoogleToken(token)
+      const { token, expiresIn } = await requestGoogleToken()
+      setGoogleToken(token, expiresIn)
       showToast('✅ Google 계정이 연결됐습니다!', 'success')
     } catch (e) {
       showToast(`연결 실패: ${e.message}`, 'error')
@@ -86,7 +86,9 @@ export default function Settings() {
             <div>
               <div style={{ fontSize: 16, fontWeight: 700 }}>Google 계정</div>
               <div style={{ fontSize: 13, color: googleToken ? '#059669' : '#9ca3af', marginTop: 2 }}>
-                {googleToken ? '✅ 연결됨 — Drive & Sheets 자동 저장 중' : '미연결'}
+                {googleToken
+                  ? `✅ 연결됨 — 약 ${tokenExpiresInMin()}분 후 만료`
+                  : '미연결 — 저장 시 자동으로 연결됩니다'}
               </div>
             </div>
           </div>

@@ -72,8 +72,9 @@ export default function Confirm() {
           setStep('Google 로그인 중...')
           await loadGIS()
           initGoogleAuth(clientId)
-          token = await requestGoogleToken()
-          setGoogleToken(token)
+          const auth = await requestGoogleToken()
+          token = auth.token
+          setGoogleToken(token, auth.expiresIn)
         }
 
         const doUpload = async (t) => {
@@ -98,8 +99,9 @@ export default function Confirm() {
             setStep('토큰 갱신 중...')
             await loadGIS()
             initGoogleAuth(clientId)
-            token = await requestGoogleToken()
-            setGoogleToken(token)
+            const reauth = await requestGoogleToken()
+            token = reauth.token
+            setGoogleToken(token, reauth.expiresIn)
             imageUrl = await doUpload(token)
           } else {
             throw e

@@ -2,6 +2,20 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 
 const AppContext = createContext()
 
+const TOKEN_KEY  = 'googleToken'
+const EXPIRY_KEY = 'googleTokenExpiry'
+
+// 저장된 토큰이 아직 유효하면 반환, 아니면 null
+function loadStoredToken() {
+  try {
+    const token  = localStorage.getItem(TOKEN_KEY)
+    const expiry = Number(localStorage.getItem(EXPIRY_KEY))
+    // 만료 2분 전부터는 만료로 처리
+    if (token && expiry && Date.now() < expiry - 120_000) return token
+  } catch {}
+  return null
+}
+
 export function AppProvider({ children }) {
   const [receipts, setReceipts] = useState(() => {
     try { return JSON.parse(localStorage.getItem('receipts') || '[]') }
@@ -13,18 +27,13 @@ export function AppProvider({ children }) {
     catch { return {} }
   })
 
-  const [googleToken, setGoogleTokenState] = useState(() =>
-    sessionStorage.getItem('googleToken') || null
-  )
+  // 앱 시작 시 저장된 토큰 복원
+  const [googleToken, setGoogleTokenState] = useState(() => loadStoredToken())
 
   const [toast, setToastState] = useState(null)
 
   useEffect(() => { localStorage.setItem('receipts', JSON.stringify(receipts)) }, [receipts])
   useEffect(() => { localStorage.setItem('settings', JSON.stringify(settings)) }, [settings])
-  useEffect(() => {
-    if (googleToken) sessionStorage.setItem('googleToken', googleToken)
-    else sessionStorage.removeItem('googleToken')
-  }, [googleToken])
 
   const showToast = useCallback((message, type = 'default') => {
     setToastState({ message, type, id: Date.now() })
@@ -49,15 +58,30 @@ export function AppProvider({ children }) {
     setSettingsState(prev => ({ ...prev, ...updates }))
   }, [])
 
-  const setGoogleToken = useCallback((token) => {
+  // token: 문자열 | null,  expiresIn: 초 (기본 3600 = 1시간)
+  const setGoogleToken = useCallback((token, expiresIn = 3600) => {
     setGoogleTokenState(token)
+    if (token) {
+      localStorage.setItem(TOKEN_KEY,  token)
+      localStorage.setItem(EXPIRY_KEY, String(Date.now() + expiresIn * 1000))
+    } else {
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(EXPIRY_KEY)
+    }
+  }, [])
+
+  // 만료까지 남은 시간(분) — Settings 표시용
+  const tokenExpiresInMin = useCallback(() => {
+    const expiry = Number(localStorage.getItem(EXPIRY_KEY))
+    if (!expiry) return 0
+    return Math.max(0, Math.round((expiry - Date.now()) / 60_000))
   }, [])
 
   return (
     <AppContext.Provider value={{
       receipts, addReceipt, updateReceipt, deleteReceipt,
       settings, updateSettings,
-      googleToken, setGoogleToken,
+      googleToken, setGoogleToken, tokenExpiresInMin,
       toast, showToast
     }}>
       {children}

@@ -19,7 +19,7 @@ export function requestGoogleToken() {
     if (!tokenClient) return reject(new Error('Google Auth 초기화 필요'))
     tokenClient.callback = (res) => {
       if (res.error) reject(new Error(res.error_description || res.error))
-      else resolve(res.access_token)
+      else resolve({ token: res.access_token, expiresIn: res.expires_in || 3600 })
     }
     tokenClient.requestAccessToken()
   })
