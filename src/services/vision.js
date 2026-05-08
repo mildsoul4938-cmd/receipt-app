@@ -61,19 +61,10 @@ function parseReceiptText(rawText) {
 
 // ── 금액 추출 ─────────────────────────────────────────────────────────────
 function extractAmount(lines, rawText) {
-  // 1) 합계/결제 키워드가 있는 줄에서 숫자 추출 (같은 줄 또는 바로 다음 줄)
-  //    우선순위: 결제금액 > 합계 > 판매금액/주유금액 > 소계
-  const priorityGroups = [
-    /결제\s*금액|실\s*결제|승인\s*금액|청구\s*금액|받을\s*금액|내야\s*할\s*금액/i,
-    /합\s*계|총\s*액|total/i,
-    /카\s*드\s*매\s*출|판매\s*금액|주유\s*금액|거래\s*금액/i,
-    /소\s*계|subtotal/i,
-  ]
-
-  for (const pattern of priorityGroups) {
+  // 키워드 그룹별로 금액 후보 추출
+  function findByKeyword(pattern) {
     for (let i = 0; i < lines.length; i++) {
       if (pattern.test(lines[i])) {
-        // 같은 줄 + 앞뒤 5줄 범위에서 숫자 수집 후 최댓값
         const candidates = []
         for (let j = i; j <= i + 5 && j < lines.length; j++) {
           candidates.push(...extractNumbers(lines[j]))
@@ -81,27 +72,40 @@ function extractAmount(lines, rawText) {
         if (candidates.length) return Math.max(...candidates)
       }
     }
+    return null
   }
 
-  // 2) ₩ 또는 숫자+원 패턴
+  // 1) 합계 계열 금액
+  const totalAmt = findByKeyword(/합\s*계|총\s*액|total/i)
+
+  // 2) 실제 결제(카드/현금) 금액
+  const paidAmt = findByKeyword(/결제\s*금액|실\s*결제|승인\s*금액|청구\s*금액|받을\s*금액|내야\s*할\s*금액|카\s*드\s*매\s*출|카\s*드\s*금액/i)
+
+  // 3) 크로스체크: 둘 다 있으면 비교
+  if (totalAmt && paidAmt) {
+    // 일치하거나 10% 이내 오차면 합계 사용 (할인/부가세 차이 허용)
+    if (Math.abs(totalAmt - paidAmt) / Math.max(totalAmt, paidAmt) < 0.1) {
+      return Math.max(totalAmt, paidAmt)
+    }
+    // 다르면 실제 결제금액 우선 (카드승인금액이 진짜 납부액)
+    return paidAmt
+  }
+  if (paidAmt) return paidAmt
+  if (totalAmt) return totalAmt
+
+  // 4) 판매금액/주유금액 등 기타 키워드
+  const otherAmt = findByKeyword(/판매\s*금액|주유\s*금액|거래\s*금액|소\s*계|subtotal/i)
+  if (otherAmt) return otherAmt
+
+  // 5) ₩ 또는 숫자+원 패턴
   const wonMatch = rawText.match(/₩\s*([0-9,]+)/) || rawText.match(/([0-9,]+)\s*원/)
   if (wonMatch) {
     const v = parseInt(wonMatch[1].replace(/,/g, ''))
-    if (v >= 100 && v <= 10_000_000) return v
+    if (v >= 1000 && v <= 10_000_000) return v
   }
 
-  // 3) 줄 끝에 금액 형태로 끝나는 패턴 (오른쪽 정렬된 영수증)
-  for (const line of lines) {
-    const m = line.match(/([0-9,]{4,})\s*$/)
-    if (m) {
-      const v = parseInt(m[1].replace(/,/g, ''))
-      if (v >= 1000 && v <= 10_000_000) return v
-    }
-  }
-
-  // 4) 모든 금액 후보 중 합리적 범위의 최댓값
-  const allNums = lines.flatMap(extractNumbers)
-    .filter(n => n >= 1000 && n <= 10_000_000)
+  // 6) 모든 금액 후보 중 최댓값 (최후 수단)
+  const allNums = lines.flatMap(extractNumbers).filter(n => n >= 1000 && n <= 10_000_000)
   if (allNums.length) return Math.max(...allNums)
 
   return 0
