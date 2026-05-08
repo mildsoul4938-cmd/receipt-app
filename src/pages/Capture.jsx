@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { compressImage, analyzeReceipt } from '../services/vision.js'
+import ImageEditor from '../components/ImageEditor.jsx'
 
 export default function Capture() {
   const navigate = useNavigate()
@@ -8,22 +9,36 @@ export default function Capture() {
   const galleryRef = useRef(null)
 
   const [preview, setPreview] = useState(null)
-  const [status, setStatus] = useState('idle') // idle | compressing | analyzing | done | error
+  const [status, setStatus] = useState('idle') // idle | compressing | editing | analyzing | done | error
   const [progress, setProgress] = useState(0)
   const [progressMsg, setProgressMsg] = useState('')
   const [result, setResult] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
+  const [rawImage, setRawImage] = useState(null) // 편집 전 원본
 
   async function handleFile(file) {
     if (!file) return
     setResult(null); setErrorMsg(''); setStatus('compressing'); setProgress(0)
 
     const compressed = await compressImage(file)
-    setPreview(compressed)
-    setStatus('analyzing')
+    setRawImage(compressed)
+    setStatus('editing') // 편집기 열기
+  }
 
+  function handleEditConfirm(editedImage) {
+    setPreview(editedImage)
+    setStatus('analyzing')
+    analyzeImage(editedImage)
+  }
+
+  function handleEditCancel() {
+    setRawImage(null)
+    setStatus('idle')
+  }
+
+  async function analyzeImage(imageDataUrl) {
     try {
-      const extracted = await analyzeReceipt(compressed, (pct, msg) => {
+      const extracted = await analyzeReceipt(imageDataUrl, (pct, msg) => {
         setProgress(pct)
         setProgressMsg(msg)
       })
@@ -38,6 +53,14 @@ export default function Capture() {
   const analyzing = status === 'analyzing' || status === 'compressing'
 
   return (
+    <>
+    {status === 'editing' && rawImage && (
+      <ImageEditor
+        imageDataUrl={rawImage}
+        onConfirm={handleEditConfirm}
+        onCancel={handleEditCancel}
+      />
+    )}
     <div style={{
       display: 'flex', flexDirection: 'column', minHeight: '100dvh', background: '#111827',
       paddingTop: 'env(safe-area-inset-top, 0px)',
@@ -157,6 +180,7 @@ export default function Capture() {
         )}
       </div>
     </div>
+    </>
   )
 }
 

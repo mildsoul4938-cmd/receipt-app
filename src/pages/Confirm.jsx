@@ -29,8 +29,8 @@ function loadGIS() {
   })
 }
 
-const CATEGORIES = ['식비', '교통', '접대비', '숙박', '소모품', '기타']
-const CAT_EMOJI  = { '식비':'🍽️','교통':'🚕','접대비':'🤝','숙박':'🏨','소모품':'📦','기타':'📄' }
+const CATEGORIES = ['식비', '교통', '접대비', '숙박', '소모품', '통신/IT', '의료비', '기타']
+const CAT_EMOJI  = { '식비':'🍽️','교통':'🚕','접대비':'🤝','숙박':'🏨','소모품':'📦','통신/IT':'📱','의료비':'🏥','기타':'📄' }
 
 export default function Confirm() {
   const navigate = useNavigate()
@@ -92,8 +92,9 @@ export default function Confirm() {
         try {
           imageUrl = await doUpload(token)
         } catch (e) {
-          // 401이면 토큰 만료 → 재인증 후 재시도
-          if (e.message.includes('401') || e.message.includes('Invalid Credentials') || e.message.includes('UNAUTHENTICATED')) {
+          // 401 / 토큰 만료 → 재인증 후 재시도
+          const expired = e.message.includes('401') || e.message.includes('Invalid Credentials') || e.message.includes('UNAUTHENTICATED') || e.message.includes('invalid_token')
+          if (expired) {
             setStep('토큰 갱신 중...')
             await loadGIS()
             initGoogleAuth(clientId)

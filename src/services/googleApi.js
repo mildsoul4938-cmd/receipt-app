@@ -36,6 +36,8 @@ export async function getOrCreateSpreadsheet(token, year) {
   const cached = localStorage.getItem(cacheKey)
   if (cached && await verifySpreadsheet(token, cached)) return cached
 
+  // 캐시 무효 → 새로 생성
+  localStorage.removeItem(cacheKey)
   const res = await gRequest(token, 'POST', 'https://sheets.googleapis.com/v4/spreadsheets', {
     properties: { title: `영수증 정리기 ${year}` }
   })
