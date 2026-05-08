@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
 import {
@@ -47,9 +47,11 @@ export default function Confirm() {
     category: extracted?.category || '식비',
     memo:     ''
   })
-  const [saving,    setSaving]    = useState(false)
-  const [step,      setStep]      = useState('')
+  const [saving,     setSaving]    = useState(false)
+  const [step,       setStep]      = useState('')
   const [cloudError, setCloudError] = useState('')
+  const savedReceipt  = useRef(null)  // 재시도 시 중복 로컬 저장 방지
+  const sheetsWritten = useRef(false) // Drive만 실패 시 재시도해도 Sheets 중복 방지
 
   function set(k, v) { setForm(p => ({ ...p, [k]: v })) }
 
@@ -60,7 +62,13 @@ export default function Confirm() {
 
     setSaving(true)
     setCloudError('')
-    const receipt = addReceipt({ date: form.date, merchant: form.merchant.trim(), amount, category: form.category, memo: form.memo.trim(), image: image || null })
+
+    // 재시도 시 중복 저장 방지 — 이미 로컬에 저장한 영수증 재사용
+    let receipt = savedReceipt.current
+    if (!receipt) {
+      receipt = addReceipt({ date: form.date, merchant: form.merchant.trim(), amount, category: form.category, memo: form.memo.trim(), image: image || null })
+      savedReceipt.current = receipt
+    }
 
     const clientId = settings.clientId || import.meta.env.VITE_GOOGLE_CLIENT_ID
 
@@ -91,11 +99,14 @@ export default function Confirm() {
             }
           }
 
-          // 2) Sheets 기록 (항상 실행)
-          setStep('Google Sheets에 기록 중...')
-          const year = form.date.split('-')[0]
-          const ssId = await getOrCreateSpreadsheet(t, year)
-          await appendReceiptRow(t, ssId, { ...receipt, imageUrl })
+          // 2) Sheets 기록 — Drive만 실패 후 재시도 시 중복 방지
+          if (!sheetsWritten.current) {
+            setStep('Google Sheets에 기록 중...')
+            const year = form.date.split('-')[0]
+            const ssId = await getOrCreateSpreadsheet(t, year)
+            await appendReceiptRow(t, ssId, { ...receipt, imageUrl })
+            sheetsWritten.current = true
+          }
 
           return { imageUrl, driveErr }
         }
@@ -138,6 +149,8 @@ export default function Confirm() {
     }
 
     setSaving(false); setStep('')
+    savedReceipt.current  = null
+    sheetsWritten.current = false
     navigate('/', { replace: true })
   }
 

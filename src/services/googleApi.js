@@ -94,7 +94,7 @@ export async function appendReceiptRow(token, spreadsheetId, receipt) {
   const colIdx = r1d.values?.[0]?.length ?? 1  // A=0 이미 레이블, B=1 부터 데이터
   const col    = colLetter(colIdx)
 
-  const detail  = receipt.memo ? `${receipt.merchant} - ${receipt.memo}` : receipt.merchant
+  const detail  = receipt.memo || ''
   const imgCell = receipt.imageUrl ? `=IMAGE("${receipt.imageUrl}",2)` : ''
 
   // 세로(열)로 5개 값 기록

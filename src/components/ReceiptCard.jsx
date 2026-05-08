@@ -3,10 +3,10 @@ import { useApp } from '../context/AppContext.jsx'
 
 const CAT_EMOJI = {
   '식비': '🍽️', '교통': '🚕', '접대비': '🤝',
-  '숙박': '🏨', '소모품': '📦', '기타': '📄'
+  '숙박': '🏨', '소모품': '📦', '통신/IT': '📱', '의료비': '🏥', '기타': '📄'
 }
 
-const CATEGORIES = ['식비', '교통', '접대비', '숙박', '소모품', '기타']
+const CATEGORIES = ['식비', '교통', '접대비', '숙박', '소모품', '통신/IT', '의료비', '기타']
 
 export default function ReceiptCard({ receipt }) {
   const { updateReceipt, deleteReceipt, showToast } = useApp()
