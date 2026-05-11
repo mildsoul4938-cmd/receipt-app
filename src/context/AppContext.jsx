@@ -32,7 +32,12 @@ export function AppProvider({ children }) {
 
   const [toast, setToastState] = useState(null)
 
-  useEffect(() => { localStorage.setItem('receipts', JSON.stringify(receipts)) }, [receipts])
+  useEffect(() => {
+    // image(base64)는 용량이 크므로 localStorage에서 제외
+    const slim = receipts.map(({ image: _img, ...r }) => r)
+    try { localStorage.setItem('receipts', JSON.stringify(slim)) }
+    catch { /* QuotaExceededError 무시 */ }
+  }, [receipts])
   useEffect(() => { localStorage.setItem('settings', JSON.stringify(settings)) }, [settings])
 
   const showToast = useCallback((message, type = 'default') => {
