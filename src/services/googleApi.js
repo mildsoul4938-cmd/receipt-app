@@ -112,8 +112,8 @@ export async function appendReceiptRow(token, spreadsheetId, receipt) {
     try {
       await gRequest(token, 'POST', `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
         requests: [
-          // 열 너비 150px
-          { updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: colIdx, endIndex: colIdx + 1 }, properties: { pixelSize: 150 }, fields: 'pixelSize' } },
+          // 열 너비 400px
+          { updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: colIdx, endIndex: colIdx + 1 }, properties: { pixelSize: 400 }, fields: 'pixelSize' } },
           // 상하좌우 가운데 정렬
           {
             repeatCell: {
@@ -172,9 +172,9 @@ async function ensureMonthSheet(token, spreadsheetId, sheetName) {
           { updateBorders: { range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 5, startColumnIndex: 0, endColumnIndex: 1 }, top: BD, bottom: BD, left: BD, right: BD, innerHorizontal: BD } },
           // A열 너비 90px
           { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 }, properties: { pixelSize: 90 }, fields: 'pixelSize' } },
-          // 행 1~4: 32px / 행 5(영수증): 240px
+          // 행 1~4: 32px / 행 5(영수증): 600px
           { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'ROWS', startIndex: 0, endIndex: 4 }, properties: { pixelSize: 32  }, fields: 'pixelSize' } },
-          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'ROWS', startIndex: 4, endIndex: 5 }, properties: { pixelSize: 240 }, fields: 'pixelSize' } },
+          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'ROWS', startIndex: 4, endIndex: 5 }, properties: { pixelSize: 600 }, fields: 'pixelSize' } },
           // 분류 행(2행, index 1) B열 이후 드롭다운
           {
             setDataValidation: {
