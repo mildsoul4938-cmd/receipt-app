@@ -44,7 +44,7 @@ export default function Confirm() {
     date:     extracted?.date     || today,
     merchant: extracted?.merchant || '',
     amount:   extracted?.amount   || '',
-    category: extracted?.category || '식비',
+    category: extracted?.category || '식사',
     memo:     ''
   })
   const [saving,     setSaving]    = useState(false)
