@@ -1,5 +1,9 @@
 import { useState } from 'react'
 import { useApp } from '../context/AppContext.jsx'
+import {
+  initGoogleAuth, requestGoogleToken,
+  getOrCreateSpreadsheet, appendReceiptRow, uploadReceiptImage
+} from '../services/googleApi.js'
 
 const CAT_EMOJI = {
   '식사': '🍽️', '교통': '🚕', '접대비': '🤝',
@@ -8,9 +12,22 @@ const CAT_EMOJI = {
 
 const CATEGORIES = ['식사', '교통', '접대비', '숙박', '소모품', '통신/IT', '의료비', '사무 장비', '기타']
 
+function loadGIS() {
+  return new Promise((resolve, reject) => {
+    if (window.google?.accounts) return resolve()
+    const script = document.createElement('script')
+    script.src = 'https://accounts.google.com/gsi/client'
+    const timer = setTimeout(() => { script.remove(); reject(new Error('Google 연결 시간 초과')) }, 30000)
+    script.onload = () => { clearTimeout(timer); window.google?.accounts ? resolve() : reject(new Error('Google 초기화 실패')) }
+    script.onerror = () => { clearTimeout(timer); script.remove(); reject(new Error('Google 로드 실패')) }
+    document.head.appendChild(script)
+  })
+}
+
 export default function ReceiptCard({ receipt }) {
-  const { updateReceipt, deleteReceipt, showToast } = useApp()
+  const { updateReceipt, deleteReceipt, showToast, googleToken, setGoogleToken, settings } = useApp()
   const [editing, setEditing] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({
     date: receipt.date,
@@ -35,6 +52,52 @@ export default function ReceiptCard({ receipt }) {
     deleteReceipt(receipt.id)
     showToast('삭제되었습니다')
     setConfirmDelete(false)
+  }
+
+  async function handleUpload() {
+    const clientId = settings.clientId || import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (!clientId && !googleToken) {
+      showToast('설정에서 Google 계정을 먼저 연결해주세요', 'error')
+      return
+    }
+    setUploading(true)
+    try {
+      let token = googleToken
+      if (!token) {
+        await loadGIS()
+        initGoogleAuth(clientId)
+        const auth = await requestGoogleToken()
+        token = auth.token
+        setGoogleToken(token, auth.expiresIn)
+      }
+
+      // Drive 이미지 업로드 (이미지 있고 아직 업로드 안된 경우)
+      let imageUrl = receipt.imageUrl || ''
+      if (receipt.image && !imageUrl) {
+        try {
+          imageUrl = await uploadReceiptImage(token, receipt.image, receipt)
+        } catch (e) {
+          showToast(`Drive 이미지 실패: ${e.message}`, 'error')
+        }
+      }
+
+      // Sheets 기록
+      const year = receipt.date.split('-')[0]
+      const ssId = await getOrCreateSpreadsheet(token, year)
+      await appendReceiptRow(token, ssId, { ...receipt, imageUrl })
+
+      updateReceipt(receipt.id, { synced: true, imageUrl })
+      showToast('☁️ 업로드 완료!', 'success')
+    } catch (e) {
+      const expired = /401|Invalid Credentials|UNAUTHENTICATED/i.test(e.message)
+      if (expired) {
+        showToast('토큰 만료 — 설정에서 재연결해주세요', 'error')
+      } else {
+        showToast(`업로드 실패: ${e.message}`, 'error')
+      }
+    } finally {
+      setUploading(false)
+    }
   }
 
   if (editing) {
@@ -102,9 +165,10 @@ export default function ReceiptCard({ receipt }) {
             <span className={`cat-badge cat-${receipt.category}`} style={{ fontSize: 10, padding: '1px 7px' }}>
               {receipt.category}
             </span>
-            {receipt.synced && (
-              <span style={{ fontSize: 10, color: '#059669' }}>☁️</span>
-            )}
+            {receipt.synced
+              ? <span style={{ fontSize: 10, color: '#059669' }}>☁️ 동기화</span>
+              : <span style={{ fontSize: 10, color: '#f59e0b' }}>● 미업로드</span>
+            }
           </div>
           {receipt.memo && (
             <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2,
@@ -120,6 +184,13 @@ export default function ReceiptCard({ receipt }) {
             ₩{Number(receipt.amount).toLocaleString()}
           </div>
           <div style={{ display: 'flex', gap: 4 }}>
+            {/* 업로드 버튼 — 미동기화 항목만 강조 */}
+            <button onClick={handleUpload} disabled={uploading}
+              style={{ background: receipt.synced ? '#f3f4f6' : '#d1fae5', border: 'none', borderRadius: 8,
+                padding: '4px 8px', fontSize: 12, cursor: 'pointer',
+                color: receipt.synced ? '#9ca3af' : '#059669', opacity: uploading ? 0.6 : 1 }}>
+              {uploading ? '⏳' : '☁️'}
+            </button>
             <button onClick={() => setEditing(true)}
               style={{ background: '#f3f4f6', border: 'none', borderRadius: 8,
                 padding: '4px 8px', fontSize: 12, cursor: 'pointer', color: '#374151' }}>
