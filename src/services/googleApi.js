@@ -180,7 +180,7 @@ async function ensureMonthSheet(token, spreadsheetId, sheetName) {
             setDataValidation: {
               range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: 2, startColumnIndex: 1, endColumnIndex: 100 },
               rule: {
-                condition: { type: 'ONE_OF_LIST', values: ['식비','교통','접대비','숙박','소모품','통신/IT','의료비','기타'].map(v => ({ userEnteredValue: v })) },
+                condition: { type: 'ONE_OF_LIST', values: ['식사','교통','접대비','숙박','소모품','통신/IT','의료비','사무 장비','기타'].map(v => ({ userEnteredValue: v })) },
                 showCustomUi: true, strict: false
               }
             }
