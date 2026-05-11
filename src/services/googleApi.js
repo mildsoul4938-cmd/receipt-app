@@ -242,10 +242,24 @@ async function getOrCreateReceiptFolder(token, dateStr) {
   return await getOrCreateFolder(token, `${year}_${month}`, yearId)
 }
 
+async function folderExists(token, id) {
+  try {
+    const r = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${id}?fields=id,trashed`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    if (!r.ok) return false
+    const d = await r.json()
+    return !d.trashed
+  } catch { return false }
+}
+
 async function getOrCreateFolder(token, name, parentId) {
   const key = `fid_${name}_${parentId}`
   const cached = sessionStorage.getItem(key)
-  if (cached) return cached
+  // 캐시된 폴더가 실제로 존재하는지 확인
+  if (cached && await folderExists(token, cached)) return cached
+  sessionStorage.removeItem(key)
 
   const q = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false${parentId ? ` and '${parentId}' in parents` : ''}`
   const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`,
