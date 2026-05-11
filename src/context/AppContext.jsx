@@ -18,8 +18,16 @@ function loadStoredToken() {
 
 export function AppProvider({ children }) {
   const [receipts, setReceipts] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('receipts') || '[]') }
-    catch { return [] }
+    try {
+      const stored = JSON.parse(localStorage.getItem('receipts') || '[]')
+      // 기존에 저장된 base64 이미지 즉시 제거 (용량 확보)
+      if (stored.some(r => r.image)) {
+        const slim = stored.map(({ image: _img, ...r }) => r)
+        try { localStorage.setItem('receipts', JSON.stringify(slim)) } catch {}
+        return slim
+      }
+      return stored
+    } catch { return [] }
   })
 
   const [settings, setSettingsState] = useState(() => {
@@ -38,7 +46,7 @@ export function AppProvider({ children }) {
     try { localStorage.setItem('receipts', JSON.stringify(slim)) }
     catch { /* QuotaExceededError 무시 */ }
   }, [receipts])
-  useEffect(() => { localStorage.setItem('settings', JSON.stringify(settings)) }, [settings])
+  useEffect(() => { try { localStorage.setItem('settings', JSON.stringify(settings)) } catch {} }, [settings])
 
   const showToast = useCallback((message, type = 'default') => {
     setToastState({ message, type, id: Date.now() })
@@ -67,8 +75,10 @@ export function AppProvider({ children }) {
   const setGoogleToken = useCallback((token, expiresIn = 3600) => {
     setGoogleTokenState(token)
     if (token) {
-      localStorage.setItem(TOKEN_KEY,  token)
-      localStorage.setItem(EXPIRY_KEY, String(Date.now() + expiresIn * 1000))
+      try {
+        localStorage.setItem(TOKEN_KEY,  token)
+        localStorage.setItem(EXPIRY_KEY, String(Date.now() + expiresIn * 1000))
+      } catch {}
     } else {
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(EXPIRY_KEY)
