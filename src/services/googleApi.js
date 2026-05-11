@@ -36,20 +36,25 @@ export async function getOrCreateSpreadsheet(token, year) {
   const cached = localStorage.getItem(cacheKey)
   if (cached && await verifySpreadsheet(token, cached)) return cached
 
-  // 캐시 무효 → 새로 생성
+  // 캐시 무효(삭제·휴지통 포함) → 새로 생성
   localStorage.removeItem(cacheKey)
   const res = await gRequest(token, 'POST', 'https://sheets.googleapis.com/v4/spreadsheets', {
     properties: { title: `영수증 정리기 ${year}` }
   })
-  localStorage.setItem(cacheKey, res.spreadsheetId)
+  try { localStorage.setItem(cacheKey, res.spreadsheetId) } catch {}
   return res.spreadsheetId
 }
 
 async function verifySpreadsheet(token, id) {
   try {
-    const r = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=spreadsheetId`,
-      { headers: { Authorization: `Bearer ${token}` } })
-    return r.ok
+    // trashed=true 이면 삭제된 파일 → 새로 생성
+    const r = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${id}?fields=id,trashed`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    if (!r.ok) return false
+    const data = await r.json()
+    return !data.trashed  // 휴지통에 있으면 false
   } catch { return false }
 }
 
