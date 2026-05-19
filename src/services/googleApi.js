@@ -100,7 +100,7 @@ export async function appendReceiptRow(token, spreadsheetId, receipt) {
   const col    = colLetter(colIdx)
 
   const detail  = receipt.memo || ''
-  const imgCell = receipt.imageUrl ? `=IMAGE("${receipt.imageUrl}",2)` : ''
+  const imgCell = receipt.imageUrl ? `=IMAGE("${receipt.imageUrl}",1)` : ''
 
   // 세로(열)로 5개 값 기록
   await gRequest(token, 'PUT',
