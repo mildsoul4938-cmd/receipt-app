@@ -1,6 +1,6 @@
 const VISION_API_KEY = import.meta.env.VITE_GOOGLE_VISION_KEY
 
-export async function compressImage(file, maxWidth = 1600) {
+export async function compressImage(file, maxWidth = 2400) {
   return new Promise((resolve) => {
     const reader = new FileReader()
     reader.onload = (e) => {

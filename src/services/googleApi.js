@@ -231,8 +231,8 @@ export async function uploadReceiptImage(token, base64DataUrl, receipt) {
     })
   } catch { /* 권한 설정 실패해도 계속 */ }
 
-  // =IMAGE() 고화질 CDN URL
-  return `https://lh3.googleusercontent.com/d/${fileId}`
+  // =IMAGE() 고화질 직접 다운로드 URL
+  return `https://drive.google.com/uc?export=view&id=${fileId}`
 }
 
 async function getOrCreateReceiptFolder(token, dateStr) {
