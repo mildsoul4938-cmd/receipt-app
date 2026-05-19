@@ -117,8 +117,8 @@ export async function appendReceiptRow(token, spreadsheetId, receipt) {
     try {
       await gRequest(token, 'POST', `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
         requests: [
-          // 열 너비 400px
-          { updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: colIdx, endIndex: colIdx + 1 }, properties: { pixelSize: 400 }, fields: 'pixelSize' } },
+          // 열 너비 600px
+          { updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: colIdx, endIndex: colIdx + 1 }, properties: { pixelSize: 600 }, fields: 'pixelSize' } },
           // 상하좌우 가운데 정렬
           {
             repeatCell: {
@@ -231,8 +231,8 @@ export async function uploadReceiptImage(token, base64DataUrl, receipt) {
     })
   } catch { /* 권한 설정 실패해도 계속 */ }
 
-  // =IMAGE() 에 사용할 직접 URL
-  return `https://drive.google.com/uc?id=${fileId}`
+  // =IMAGE() 고화질 CDN URL
+  return `https://lh3.googleusercontent.com/d/${fileId}`
 }
 
 async function getOrCreateReceiptFolder(token, dateStr) {
