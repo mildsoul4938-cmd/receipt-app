@@ -99,18 +99,38 @@ export async function appendReceiptRow(token, spreadsheetId, receipt) {
   const colIdx = r1d.values?.[0]?.length ?? 1  // A=0 이미 레이블, B=1 부터 데이터
   const col    = colLetter(colIdx)
 
-  const detail  = receipt.memo || ''
-  const imgCell = receipt.imageUrl ? `=IMAGE("${receipt.imageUrl}",1)` : ''
+  const detail = receipt.memo || ''
 
-  // 세로(열)로 5개 값 기록
+  // 1~4행: 텍스트 값 기록 (이미지 행 제외)
   await gRequest(token, 'PUT',
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!${col}1:${col}5?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!${col}1:${col}4?valueInputOption=USER_ENTERED`,
     {
-      range: `${sheetName}!${col}1:${col}5`,
+      range: `${sheetName}!${col}1:${col}4`,
       majorDimension: 'COLUMNS',
-      values: [[korDate(receipt.date), receipt.category, detail, receipt.amount, imgCell]]
+      values: [[korDate(receipt.date), receipt.category, detail, receipt.amount]]
     }
   )
+
+  // 5행: 이미지 셀 직접 삽입 (=IMAGE 수식 대신 네이티브 이미지)
+  if (receipt.imageUrl && sheetId !== null) {
+    try {
+      await gRequest(token, 'POST', `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        requests: [{
+          updateCells: {
+            rows: [{ values: [{ image: { sourceUri: receipt.imageUrl, altText: '영수증' } }] }],
+            fields: 'image',
+            range: { sheetId, startRowIndex: 4, endRowIndex: 5, startColumnIndex: colIdx, endColumnIndex: colIdx + 1 }
+          }
+        }]
+      })
+    } catch {
+      // 네이티브 삽입 실패 시 =IMAGE() 수식으로 폴백
+      await gRequest(token, 'PUT',
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!${col}5?valueInputOption=USER_ENTERED`,
+        { range: `${sheetName}!${col}5`, majorDimension: 'COLUMNS', values: [[`=IMAGE("${receipt.imageUrl}",1)`]] }
+      )
+    }
+  }
 
   // 새 열 서식
   if (sheetId !== null) {
