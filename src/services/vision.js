@@ -1,23 +1,69 @@
 const VISION_API_KEY = import.meta.env.VITE_GOOGLE_VISION_KEY
 
 export async function compressImage(file, maxWidth = 2400) {
-  return new Promise((resolve) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const img = new Image()
-      img.onload = () => {
-        // 브라우저가 EXIF 방향을 자동 적용하므로 img.width/height는 이미 올바른 값
-        const scale = Math.min(1, maxWidth / img.width)
-        const canvas = document.createElement('canvas')
-        canvas.width  = Math.round(img.width  * scale)
-        canvas.height = Math.round(img.height * scale)
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-        resolve(canvas.toDataURL('image/jpeg', 0.92))
+  // createImageBitmap({ imageOrientation: 'from-image' }) 은
+  // EXIF 회전을 반영한 올바른 width/height를 반환함
+  try {
+    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' })
+    const scale = Math.min(1, maxWidth / bmp.width)
+    const canvas = document.createElement('canvas')
+    canvas.width  = Math.round(bmp.width  * scale)
+    canvas.height = Math.round(bmp.height * scale)
+    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height)
+    bmp.close?.()
+    return canvas.toDataURL('image/jpeg', 0.95)
+  } catch {
+    // 구형 브라우저 폴백: EXIF 수동 처리
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const orientation = getExifOrientation(e.target.result)
+        const img = new Image()
+        img.onload = () => {
+          const W = img.width, H = img.height
+          const swap = [5,6,7,8].includes(orientation)
+          const scale = Math.min(1, maxWidth / (swap ? H : W))
+          const outW = Math.round((swap ? H : W) * scale)
+          const outH = Math.round((swap ? W : H) * scale)
+          const canvas = document.createElement('canvas')
+          canvas.width = outW; canvas.height = outH
+          const ctx = canvas.getContext('2d')
+          switch (orientation) {
+            case 3: ctx.translate(outW, outH); ctx.rotate(Math.PI); break
+            case 6: ctx.translate(outW, 0);   ctx.rotate(Math.PI / 2); break
+            case 8: ctx.translate(0, outH);   ctx.rotate(-Math.PI / 2); break
+          }
+          ctx.drawImage(img, 0, 0, W * scale, H * scale)
+          resolve(canvas.toDataURL('image/jpeg', 0.95))
+        }
+        img.src = e.target.result
       }
-      img.src = e.target.result
+      reader.readAsDataURL(file)
+    })
+  }
+}
+
+function getExifOrientation(dataUrl) {
+  try {
+    const bin = atob(dataUrl.split(',')[1].slice(0, 2048))
+    const view = new DataView(new Uint8Array([...bin].map(c => c.charCodeAt(0))).buffer)
+    if (view.getUint16(0) !== 0xFFD8) return 1
+    let off = 2
+    while (off < view.byteLength - 4) {
+      if (view.getUint16(off) === 0xFFE1) {
+        const little = view.getUint16(off + 10) === 0x4949
+        const ifd = view.getUint32(off + 14, little)
+        const n   = view.getUint16(off + 10 + ifd, little)
+        for (let i = 0; i < n; i++) {
+          if (view.getUint16(off + 10 + ifd + 2 + i * 12, little) === 0x0112)
+            return view.getUint16(off + 10 + ifd + 2 + i * 12 + 8, little)
+        }
+        break
+      }
+      off += 2 + view.getUint16(off + 2)
     }
-    reader.readAsDataURL(file)
-  })
+  } catch {}
+  return 1
 }
 
 export async function analyzeReceipt(imageDataUrl, onProgress) {

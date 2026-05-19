@@ -120,7 +120,7 @@ export default function ImageEditor({ imageDataUrl, onConfirm, onCancel }) {
     ctx.rotate(rotation * Math.PI / 180)
     ctx.drawImage(img, -img.width / 2, -img.height / 2)
     ctx.restore()
-    onConfirm(out.toDataURL('image/jpeg', 0.92))
+    onConfirm(out.toDataURL('image/jpeg', 0.95))
   }
 
   function skipEdit() {

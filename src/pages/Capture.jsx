@@ -15,9 +15,11 @@ export default function Capture() {
   const [result, setResult] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [rawImage, setRawImage] = useState(null) // 편집 전 원본
+  const [originalFile, setOriginalFile] = useState(null) // Drive 업로드용 원본
 
   async function handleFile(file) {
     if (!file) return
+    setOriginalFile(file)           // 원본 파일 보존 (Drive 고화질 업로드용)
     setResult(null); setErrorMsg(''); setStatus('compressing'); setProgress(0)
 
     const compressed = await compressImage(file)
@@ -173,7 +175,7 @@ export default function Capture() {
             <button className="btn btn-secondary" style={{ flex: 1 }} disabled={analyzing}
               onClick={() => galleryRef.current.click()}>🔄 다시 선택</button>
             <button className="btn btn-primary" style={{ flex: 1 }} disabled={analyzing}
-              onClick={() => navigate('/confirm', { state: { image: preview, extracted: result } })}>
+              onClick={() => navigate('/confirm', { state: { image: preview, extracted: result, originalFile } })}>
               {analyzing ? '인식 중...' : '다음 →'}
             </button>
           </div>

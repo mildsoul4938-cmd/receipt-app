@@ -220,9 +220,12 @@ async function ensureMonthSheet(token, spreadsheetId, sheetName) {
 
 // ── Drive ─────────────────────────────────────────────────────────────────
 
-export async function uploadReceiptImage(token, base64DataUrl, receipt) {
+export async function uploadReceiptImage(token, imageSource, receipt) {
   const folderId = await getOrCreateReceiptFolder(token, receipt.date)
-  const blob = dataUrlToBlob(base64DataUrl)
+  // File/Blob 그대로 사용하면 원본 화질 유지, base64 문자열이면 변환
+  const blob = (imageSource instanceof Blob)
+    ? imageSource
+    : dataUrlToBlob(imageSource)
   const filename = `${receipt.date}_${receipt.merchant}_${receipt.amount}원.jpg`
 
   const form = new FormData()
@@ -251,8 +254,8 @@ export async function uploadReceiptImage(token, base64DataUrl, receipt) {
     })
   } catch { /* 권한 설정 실패해도 계속 */ }
 
-  // =IMAGE() 고화질 직접 다운로드 URL
-  return `https://drive.google.com/uc?export=view&id=${fileId}`
+  // 직접 다운로드 URL — Sheets 네이티브 삽입 및 =IMAGE() 모두 고화질 표시
+  return `https://drive.google.com/uc?export=download&id=${fileId}`
 }
 
 async function getOrCreateReceiptFolder(token, dateStr) {
