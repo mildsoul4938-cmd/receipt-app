@@ -4,68 +4,20 @@ export async function compressImage(file, maxWidth = 2400) {
   return new Promise((resolve) => {
     const reader = new FileReader()
     reader.onload = (e) => {
-      // EXIF 회전 정보 읽기
-      const orientation = getExifOrientation(e.target.result)
       const img = new Image()
       img.onload = () => {
-        const rotated = orientation >= 5  // 90° or 270° rotation
-        const srcW = img.width, srcH = img.height
-        const scale = Math.min(1, maxWidth / (rotated ? srcH : srcW))
-        const dstW = Math.round((rotated ? srcH : srcW) * scale)
-        const dstH = Math.round((rotated ? srcW : srcH) * scale)
+        // 브라우저가 EXIF 방향을 자동 적용하므로 img.width/height는 이미 올바른 값
+        const scale = Math.min(1, maxWidth / img.width)
         const canvas = document.createElement('canvas')
-        canvas.width = dstW
-        canvas.height = dstH
-        const ctx = canvas.getContext('2d')
-        // EXIF 방향에 따른 변환
-        applyExifRotation(ctx, orientation, dstW, dstH)
-        ctx.drawImage(img, 0, 0, srcW * scale, srcH * scale)
+        canvas.width  = Math.round(img.width  * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
         resolve(canvas.toDataURL('image/jpeg', 0.92))
       }
       img.src = e.target.result
     }
     reader.readAsDataURL(file)
   })
-}
-
-function getExifOrientation(dataUrl) {
-  try {
-    const base64 = dataUrl.split(',')[1]
-    const bin = atob(base64.slice(0, 2048))
-    const view = new DataView(new Uint8Array([...bin].map(c => c.charCodeAt(0))).buffer)
-    if (view.getUint16(0) !== 0xFFD8) return 1
-    let offset = 2
-    while (offset < view.byteLength - 2) {
-      const marker = view.getUint16(offset)
-      if (marker === 0xFFE1) {
-        const exifStr = String.fromCharCode(...new Uint8Array(view.buffer, offset + 10, 4))
-        if (exifStr !== 'Exif') break
-        const little = view.getUint16(offset + 14) === 0x4949
-        const ifdOffset = view.getUint32(offset + 18, little)
-        const entries = view.getUint16(offset + 14 + ifdOffset, little)
-        for (let i = 0; i < entries; i++) {
-          const tag = view.getUint16(offset + 14 + ifdOffset + 2 + i * 12, little)
-          if (tag === 0x0112) return view.getUint16(offset + 14 + ifdOffset + 2 + i * 12 + 8, little)
-        }
-        break
-      }
-      offset += 2 + view.getUint16(offset + 2)
-    }
-  } catch {}
-  return 1
-}
-
-function applyExifRotation(ctx, orientation, w, h) {
-  switch (orientation) {
-    case 2: ctx.transform(-1, 0, 0, 1, w, 0); break
-    case 3: ctx.transform(-1, 0, 0, -1, w, h); break
-    case 4: ctx.transform(1, 0, 0, -1, 0, h); break
-    case 5: ctx.transform(0, 1, 1, 0, 0, 0); break
-    case 6: ctx.transform(0, 1, -1, 0, h, 0); break
-    case 7: ctx.transform(0, -1, -1, 0, h, w); break
-    case 8: ctx.transform(0, -1, 1, 0, 0, w); break
-    default: break
-  }
 }
 
 export async function analyzeReceipt(imageDataUrl, onProgress) {
