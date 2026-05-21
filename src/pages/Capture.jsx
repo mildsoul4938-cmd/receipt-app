@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { compressImage, createDriveImage, analyzeReceipt } from '../services/vision.js'
+import { compressImage, analyzeReceipt } from '../services/vision.js'
 import ImageEditor from '../components/ImageEditor.jsx'
 
 export default function Capture() {
@@ -15,18 +15,13 @@ export default function Capture() {
   const [result, setResult] = useState(null)
   const [errorMsg, setErrorMsg] = useState('')
   const [rawImage, setRawImage] = useState(null) // 편집 전 원본
-  const [driveImage, setDriveImage] = useState(null) // Drive 업로드용 (EXIF 회전 적용 + 고화질)
 
   async function handleFile(file) {
     if (!file) return
     setResult(null); setErrorMsg(''); setStatus('compressing'); setProgress(0)
 
-    // OCR/편집용 압축 이미지 + Drive용 고화질 이미지 동시 생성
-    const [compressed, hq] = await Promise.all([
-      compressImage(file),
-      createDriveImage(file)
-    ])
-    setDriveImage(hq)
+    // EXIF 회전 적용 + 4000px 고화질 압축 (Drive 업로드 + OCR 동시 사용)
+    const compressed = await compressImage(file)
     setRawImage(compressed)
     setStatus('editing') // 편집기 열기
   }
@@ -179,7 +174,7 @@ export default function Capture() {
             <button className="btn btn-secondary" style={{ flex: 1 }} disabled={analyzing}
               onClick={() => galleryRef.current.click()}>🔄 다시 선택</button>
             <button className="btn btn-primary" style={{ flex: 1 }} disabled={analyzing}
-              onClick={() => navigate('/confirm', { state: { image: preview, extracted: result, driveImage } })}>
+              onClick={() => navigate('/confirm', { state: { image: preview, extracted: result } })}>
               {analyzing ? '인식 중...' : '다음 →'}
             </button>
           </div>

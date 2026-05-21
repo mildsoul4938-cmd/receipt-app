@@ -37,7 +37,7 @@ export default function Confirm() {
   const location = useLocation()
   const { addReceipt, updateReceipt, settings, googleToken, setGoogleToken, showToast } = useApp()
 
-  const { image, extracted, driveImage } = location.state || {}
+  const { image, extracted } = location.state || {}
   const today = new Date().toISOString().split('T')[0]
 
   const [form, setForm] = useState({
@@ -93,8 +93,7 @@ export default function Confirm() {
           let driveErr = ''
           if (image) {
             try {
-              // EXIF 회전 적용된 고화질 이미지 우선, 없으면 압축 이미지 사용
-              imageUrl = await uploadReceiptImage(t, driveImage || image, receipt)
+              imageUrl = await uploadReceiptImage(t, image, receipt)
             } catch (e) {
               driveErr = e.message
             }

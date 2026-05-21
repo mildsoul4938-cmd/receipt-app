@@ -1,22 +1,7 @@
 const VISION_API_KEY = import.meta.env.VITE_GOOGLE_VISION_KEY
 
-// Drive 업로드 전용: EXIF 회전 적용 + 최대 화질 유지 (픽셀에 회전을 직접 적용)
-export async function createDriveImage(file, maxWidth = 4000) {
-  try {
-    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' })
-    const scale = Math.min(1, maxWidth / bmp.width)
-    const canvas = document.createElement('canvas')
-    canvas.width  = Math.round(bmp.width  * scale)
-    canvas.height = Math.round(bmp.height * scale)
-    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height)
-    bmp.close?.()
-    return canvas.toDataURL('image/jpeg', 0.95)
-  } catch {
-    return compressImage(file, maxWidth)
-  }
-}
 
-export async function compressImage(file, maxWidth = 2400) {
+export async function compressImage(file, maxWidth = 4000) {
   // createImageBitmap({ imageOrientation: 'from-image' }) 은
   // EXIF 회전을 반영한 올바른 width/height를 반환함
   try {
