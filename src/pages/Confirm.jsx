@@ -29,8 +29,8 @@ function loadGIS() {
   })
 }
 
-const CATEGORIES = ['식사', '교통', '접대비', '숙박', '소모품', '통신/IT', '의료비', '사무 장비', '기타']
-const CAT_EMOJI  = { '식사':'🍽️','교통':'🚕','접대비':'🤝','숙박':'🏨','소모품':'📦','통신/IT':'📱','의료비':'🏥','사무 장비':'🖥️','기타':'📄' }
+const CATEGORIES = ['식사', '간식', '회식', '사무 장비', '소모품', '교통비', '디지털 상품', 'PC 및 부품', '워크샵']
+const CAT_EMOJI  = { '식사':'🍽️','간식':'🍩','회식':'🥂','사무 장비':'🖥️','소모품':'📦','교통비':'🚕','디지털 상품':'💾','PC 및 부품':'🖱️','워크샵':'📋' }
 
 export default function Confirm() {
   const navigate = useNavigate()
@@ -41,11 +41,12 @@ export default function Confirm() {
   const today = new Date().toISOString().split('T')[0]
 
   const [form, setForm] = useState({
-    date:     extracted?.date     || today,
-    merchant: extracted?.merchant || '',
-    amount:   extracted?.amount   || '',
-    category: extracted?.category || '식사',
-    memo:     ''
+    date:       extracted?.date     || today,
+    merchant:   extracted?.merchant || '',
+    amount:     extracted?.amount   || '',
+    category:   extracted?.category || '식사',
+    cardHolder: '',
+    memo:       ''
   })
   const [saving,     setSaving]    = useState(false)
   const [step,       setStep]      = useState('')
@@ -66,7 +67,7 @@ export default function Confirm() {
     // 재시도 시 중복 저장 방지 — 이미 로컬에 저장한 영수증 재사용
     let receipt = savedReceipt.current
     if (!receipt) {
-      receipt = addReceipt({ date: form.date, merchant: form.merchant.trim(), amount, category: form.category, memo: form.memo.trim(), image: image || null })
+      receipt = addReceipt({ date: form.date, merchant: form.merchant.trim(), amount, category: form.category, cardHolder: form.cardHolder.trim(), memo: form.memo.trim(), image: image || null })
       savedReceipt.current = receipt
     }
 
@@ -194,6 +195,11 @@ export default function Confirm() {
             <label className="form-label">금액 (원) *</label>
             <input type="number" inputMode="numeric" className="form-input" placeholder="0"
               value={form.amount} onChange={e => set('amount', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">카드 담당자 (선택)</label>
+            <input className="form-input" placeholder="예: 홍길동"
+              value={form.cardHolder} onChange={e => set('cardHolder', e.target.value)} />
           </div>
           <div className="form-group">
             <label className="form-label">카테고리</label>

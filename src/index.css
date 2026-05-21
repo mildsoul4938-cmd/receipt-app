@@ -162,12 +162,12 @@ html, body {
   font-weight: 600;
 }
 
-.cat-식비    { background: #fef3c7; color: #d97706; }
-.cat-교통    { background: #dcfce7; color: #16a34a; }
-.cat-접대비  { background: #dbeafe; color: #2563eb; }
-.cat-숙박    { background: #fce7f3; color: #db2777; }
-.cat-소모품  { background: #f3e8ff; color: #7c3aed; }
-.cat-기타    { background: #f1f5f9; color: #64748b; }
+.cat-식사       { background: #fef3c7; color: #d97706; }
+.cat-간식       { background: #ffedd5; color: #ea580c; }
+.cat-회식       { background: #fce7f3; color: #db2777; }
+.cat-소모품     { background: #f3e8ff; color: #7c3aed; }
+.cat-교통비     { background: #dcfce7; color: #16a34a; }
+.cat-워크샵     { background: #f1f5f9; color: #64748b; }
 
 /* 빈 상태 */
 .empty-state {

@@ -1,8 +1,8 @@
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
 
-const CAT_EMOJI = { '식사':'🍽️','교통':'🚕','접대비':'🤝','숙박':'🏨','소모품':'📦','통신/IT':'📱','의료비':'🏥','사무 장비':'🖥️','기타':'📄' }
-const CAT_BG    = { '식사':'#fef3c7','교통':'#dcfce7','접대비':'#dbeafe','숙박':'#fce7f3','소모품':'#f3e8ff','통신/IT':'#e0f2fe','의료비':'#fce7f3','사무 장비':'#f0fdf4','기타':'#f1f5f9' }
+const CAT_EMOJI = { '식사':'🍽️','간식':'🍩','회식':'🥂','사무 장비':'🖥️','소모품':'📦','교통비':'🚕','디지털 상품':'💾','PC 및 부품':'🖱️','워크샵':'📋' }
+const CAT_BG    = { '식사':'#fef3c7','간식':'#ffedd5','회식':'#fce7f3','사무 장비':'#fee2e2','소모품':'#f3e8ff','교통비':'#dcfce7','디지털 상품':'#dbeafe','PC 및 부품':'#e0e7ff','워크샵':'#f1f5f9' }
 
 export default function Home() {
   const navigate = useNavigate()

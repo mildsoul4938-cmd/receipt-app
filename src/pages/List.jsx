@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext.jsx'
 import ReceiptCard from '../components/ReceiptCard.jsx'
 
 const MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월']
-const ALL_CATS = ['전체', '식사', '교통', '접대비', '숙박', '소모품', '통신/IT', '의료비', '사무 장비', '기타']
+const ALL_CATS = ['전체', '식사', '간식', '회식', '사무 장비', '소모품', '교통비', '디지털 상품', 'PC 및 부품', '워크샵']
 
 export default function List() {
   const navigate = useNavigate()

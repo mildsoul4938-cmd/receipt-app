@@ -6,11 +6,11 @@ import {
 } from '../services/googleApi.js'
 
 const CAT_EMOJI = {
-  '식사': '🍽️', '교통': '🚕', '접대비': '🤝',
-  '숙박': '🏨', '소모품': '📦', '통신/IT': '📱', '의료비': '🏥', '사무 장비': '🖥️', '기타': '📄'
+  '식사':'🍽️','간식':'🍩','회식':'🥂','사무 장비':'🖥️',
+  '소모품':'📦','교통비':'🚕','디지털 상품':'💾','PC 및 부품':'🖱️','워크샵':'📋'
 }
 
-const CATEGORIES = ['식사', '교통', '접대비', '숙박', '소모품', '통신/IT', '의료비', '사무 장비', '기타']
+const CATEGORIES = ['식사', '간식', '회식', '사무 장비', '소모품', '교통비', '디지털 상품', 'PC 및 부품', '워크샵']
 
 function loadGIS() {
   return new Promise((resolve, reject) => {
@@ -30,11 +30,12 @@ export default function ReceiptCard({ receipt }) {
   const [uploading, setUploading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({
-    date: receipt.date,
-    merchant: receipt.merchant,
-    amount: receipt.amount,
-    category: receipt.category,
-    memo: receipt.memo || ''
+    date:       receipt.date,
+    merchant:   receipt.merchant,
+    amount:     receipt.amount,
+    category:   receipt.category,
+    cardHolder: receipt.cardHolder || '',
+    memo:       receipt.memo || ''
   })
 
   const emoji = CAT_EMOJI[receipt.category] || '📄'
@@ -122,6 +123,11 @@ export default function ReceiptCard({ receipt }) {
           <label className="form-label">금액 (원)</label>
           <input type="number" className="form-input" value={form.amount}
             onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">카드 담당자</label>
+          <input className="form-input" value={form.cardHolder} placeholder="선택 입력"
+            onChange={e => setForm(p => ({ ...p, cardHolder: e.target.value }))} />
         </div>
         <div className="form-group">
           <label className="form-label">카테고리</label>

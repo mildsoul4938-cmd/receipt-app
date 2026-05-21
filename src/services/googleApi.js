@@ -100,18 +100,20 @@ export async function appendReceiptRow(token, spreadsheetId, receipt) {
   const col    = colLetter(colIdx)
 
   const detail = receipt.memo || ''
+  const cardHolder = receipt.cardHolder || ''
 
-  // 1~4행: 텍스트 값 기록 (이미지 행 제외)
+  // 1~5행: 텍스트 값 기록 (이미지 행 제외)
+  // 행 순서: 날짜 / 카드 담당자 / 분류 / 사용내역 / 금액
   await gRequest(token, 'PUT',
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!${col}1:${col}4?valueInputOption=USER_ENTERED`,
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!${col}1:${col}5?valueInputOption=USER_ENTERED`,
     {
-      range: `${sheetName}!${col}1:${col}4`,
+      range: `${sheetName}!${col}1:${col}5`,
       majorDimension: 'COLUMNS',
-      values: [[korDate(receipt.date), receipt.category, detail, receipt.amount]]
+      values: [[korDate(receipt.date), cardHolder, receipt.category, detail, receipt.amount]]
     }
   )
 
-  // 5행: 이미지 셀 직접 삽입 (=IMAGE 수식 대신 네이티브 이미지)
+  // 6행: 이미지 셀 직접 삽입 (=IMAGE 수식 대신 네이티브 이미지)
   if (receipt.imageUrl && sheetId !== null) {
     try {
       await gRequest(token, 'POST', `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
@@ -119,15 +121,15 @@ export async function appendReceiptRow(token, spreadsheetId, receipt) {
           updateCells: {
             rows: [{ values: [{ image: { sourceUri: receipt.imageUrl, altText: '영수증' } }] }],
             fields: 'image',
-            range: { sheetId, startRowIndex: 4, endRowIndex: 5, startColumnIndex: colIdx, endColumnIndex: colIdx + 1 }
+            range: { sheetId, startRowIndex: 5, endRowIndex: 6, startColumnIndex: colIdx, endColumnIndex: colIdx + 1 }
           }
         }]
       })
     } catch {
       // 네이티브 삽입 실패 시 =IMAGE() 수식으로 폴백
       await gRequest(token, 'PUT',
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!${col}5?valueInputOption=USER_ENTERED`,
-        { range: `${sheetName}!${col}5`, majorDimension: 'COLUMNS', values: [[`=IMAGE("${receipt.imageUrl}",2)`]] }
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!${col}6?valueInputOption=USER_ENTERED`,
+        { range: `${sheetName}!${col}6`, majorDimension: 'COLUMNS', values: [[`=IMAGE("${receipt.imageUrl}",2)`]] }
       )
     }
   }
@@ -142,7 +144,7 @@ export async function appendReceiptRow(token, spreadsheetId, receipt) {
           // 상하좌우 가운데 정렬
           {
             repeatCell: {
-              range: { sheetId, startRowIndex: 0, endRowIndex: 5, startColumnIndex: colIdx, endColumnIndex: colIdx + 1 },
+              range: { sheetId, startRowIndex: 0, endRowIndex: 6, startColumnIndex: colIdx, endColumnIndex: colIdx + 1 },
               cell: { userEnteredFormat: { horizontalAlignment: 'CENTER', verticalAlignment: 'MIDDLE' } },
               fields: 'userEnteredFormat(horizontalAlignment,verticalAlignment)'
             }
@@ -150,7 +152,7 @@ export async function appendReceiptRow(token, spreadsheetId, receipt) {
           // 테두리
           {
             updateBorders: {
-              range: { sheetId, startRowIndex: 0, endRowIndex: 5, startColumnIndex: colIdx, endColumnIndex: colIdx + 1 },
+              range: { sheetId, startRowIndex: 0, endRowIndex: 6, startColumnIndex: colIdx, endColumnIndex: colIdx + 1 },
               top: BD, bottom: BD, left: BD, right: BD, innerHorizontal: BD
             }
           }
@@ -173,10 +175,10 @@ async function ensureMonthSheet(token, spreadsheetId, sheetName) {
     { requests: [{ addSheet: { properties: { title: sheetName } } }] })
   const newSheetId = res.replies?.[0]?.addSheet?.properties?.sheetId ?? null
 
-  // A열 레이블 (세로)
+  // A열 레이블 (세로) — 날짜/카드 담당자/분류/사용내역/금액/영수증
   await gRequest(token, 'PUT',
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:A5?valueInputOption=USER_ENTERED`,
-    { range: `${sheetName}!A1:A5`, majorDimension: 'COLUMNS', values: [['날짜', '분류', '사용내역', '금액', '영수증']] }
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:A6?valueInputOption=USER_ENTERED`,
+    { range: `${sheetName}!A1:A6`, majorDimension: 'COLUMNS', values: [['날짜', '카드 담당자', '분류', '사용내역', '금액', '영수증']] }
   )
 
   if (newSheetId !== null) {
@@ -193,19 +195,19 @@ async function ensureMonthSheet(token, spreadsheetId, sheetName) {
               fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment)'
             }
           },
-          // A열 테두리
-          { updateBorders: { range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 5, startColumnIndex: 0, endColumnIndex: 1 }, top: BD, bottom: BD, left: BD, right: BD, innerHorizontal: BD } },
-          // A열 너비 90px
-          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 }, properties: { pixelSize: 90 }, fields: 'pixelSize' } },
-          // 행 1~4: 40px / 행 5(영수증): 1200px
-          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'ROWS', startIndex: 0, endIndex: 4 }, properties: { pixelSize: 40  }, fields: 'pixelSize' } },
-          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'ROWS', startIndex: 4, endIndex: 5 }, properties: { pixelSize: 1200 }, fields: 'pixelSize' } },
-          // 분류 행(2행, index 1) B열 이후 드롭다운
+          // A열 테두리 (6행)
+          { updateBorders: { range: { sheetId: newSheetId, startRowIndex: 0, endRowIndex: 6, startColumnIndex: 0, endColumnIndex: 1 }, top: BD, bottom: BD, left: BD, right: BD, innerHorizontal: BD } },
+          // A열 너비 100px
+          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: 1 }, properties: { pixelSize: 100 }, fields: 'pixelSize' } },
+          // 행 1~5: 40px / 행 6(영수증): 1200px
+          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'ROWS', startIndex: 0, endIndex: 5 }, properties: { pixelSize: 40  }, fields: 'pixelSize' } },
+          { updateDimensionProperties: { range: { sheetId: newSheetId, dimension: 'ROWS', startIndex: 5, endIndex: 6 }, properties: { pixelSize: 1200 }, fields: 'pixelSize' } },
+          // 분류 행(3행, index 2) B열 이후 드롭다운
           {
             setDataValidation: {
-              range: { sheetId: newSheetId, startRowIndex: 1, endRowIndex: 2, startColumnIndex: 1, endColumnIndex: 100 },
+              range: { sheetId: newSheetId, startRowIndex: 2, endRowIndex: 3, startColumnIndex: 1, endColumnIndex: 100 },
               rule: {
-                condition: { type: 'ONE_OF_LIST', values: ['식사','교통','접대비','숙박','소모품','통신/IT','의료비','사무 장비','기타'].map(v => ({ userEnteredValue: v })) },
+                condition: { type: 'ONE_OF_LIST', values: ['식사','간식','회식','사무 장비','소모품','교통비','디지털 상품','PC 및 부품','워크샵'].map(v => ({ userEnteredValue: v })) },
                 showCustomUi: true, strict: false
               }
             }
