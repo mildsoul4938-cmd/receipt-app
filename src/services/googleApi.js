@@ -127,7 +127,7 @@ export async function appendReceiptRow(token, spreadsheetId, receipt) {
       // 네이티브 삽입 실패 시 =IMAGE() 수식으로 폴백
       await gRequest(token, 'PUT',
         `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!${col}5?valueInputOption=USER_ENTERED`,
-        { range: `${sheetName}!${col}5`, majorDimension: 'COLUMNS', values: [[`=IMAGE("${receipt.imageUrl}",1)`]] }
+        { range: `${sheetName}!${col}5`, majorDimension: 'COLUMNS', values: [[`=IMAGE("${receipt.imageUrl}",2)`]] }
       )
     }
   }
@@ -254,8 +254,8 @@ export async function uploadReceiptImage(token, imageSource, receipt) {
     })
   } catch { /* 권한 설정 실패해도 계속 */ }
 
-  // 직접 다운로드 URL — Sheets 네이티브 삽입 및 =IMAGE() 모두 고화질 표시
-  return `https://drive.google.com/uc?export=download&id=${fileId}`
+  // Google 썸네일 CDN — 리다이렉트 없는 직접 이미지 URL, Sheets에서 안정적으로 로드
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w3000-h3000`
 }
 
 async function getOrCreateReceiptFolder(token, dateStr) {
