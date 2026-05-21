@@ -2,44 +2,59 @@ const VISION_API_KEY = import.meta.env.VITE_GOOGLE_VISION_KEY
 
 
 export async function compressImage(file, maxWidth = 4000) {
-  // createImageBitmap({ imageOrientation: 'from-image' }) 은
-  // EXIF 회전을 반영한 올바른 width/height를 반환함
+  // 1단계: EXIF 방향 코드 읽기
+  const dataUrl = await new Promise((res, rej) => {
+    const r = new FileReader()
+    r.onload = e => res(e.target.result)
+    r.onerror = rej
+    r.readAsDataURL(file)
+  })
+  const orientation = getExifOrientation(dataUrl)
+  const swap = [5, 6, 7, 8].includes(orientation)
+
+  // 2단계: imageOrientation:'none' → 브라우저 자동 회전 완전 차단 후 수동 적용
   try {
-    const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' })
-    const scale = Math.min(1, maxWidth / bmp.width)
+    const bmp = await createImageBitmap(file, { imageOrientation: 'none' })
+    const W = bmp.width, H = bmp.height
+    const scale = Math.min(1, maxWidth / (swap ? H : W))
+    const outW = Math.round((swap ? H : W) * scale)
+    const outH = Math.round((swap ? W : H) * scale)
     const canvas = document.createElement('canvas')
-    canvas.width  = Math.round(bmp.width  * scale)
-    canvas.height = Math.round(bmp.height * scale)
-    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height)
+    canvas.width = outW; canvas.height = outH
+    const ctx = canvas.getContext('2d')
+    ctx.save()
+    switch (orientation) {
+      case 3: ctx.translate(outW, outH); ctx.rotate(Math.PI);      break
+      case 6: ctx.translate(outW, 0);   ctx.rotate(Math.PI / 2);  break
+      case 8: ctx.translate(0, outH);   ctx.rotate(-Math.PI / 2); break
+    }
+    ctx.drawImage(bmp, 0, 0, W * scale, H * scale)
+    ctx.restore()
     bmp.close?.()
     return canvas.toDataURL('image/jpeg', 0.95)
   } catch {
-    // 구형 브라우저 폴백: EXIF 수동 처리
+    // 구형 브라우저 폴백
     return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const orientation = getExifOrientation(e.target.result)
-        const img = new Image()
-        img.onload = () => {
-          const W = img.width, H = img.height
-          const swap = [5,6,7,8].includes(orientation)
-          const scale = Math.min(1, maxWidth / (swap ? H : W))
-          const outW = Math.round((swap ? H : W) * scale)
-          const outH = Math.round((swap ? W : H) * scale)
-          const canvas = document.createElement('canvas')
-          canvas.width = outW; canvas.height = outH
-          const ctx = canvas.getContext('2d')
-          switch (orientation) {
-            case 3: ctx.translate(outW, outH); ctx.rotate(Math.PI); break
-            case 6: ctx.translate(outW, 0);   ctx.rotate(Math.PI / 2); break
-            case 8: ctx.translate(0, outH);   ctx.rotate(-Math.PI / 2); break
-          }
-          ctx.drawImage(img, 0, 0, W * scale, H * scale)
-          resolve(canvas.toDataURL('image/jpeg', 0.95))
+      const img = new Image()
+      img.onload = () => {
+        const W = img.naturalWidth, H = img.naturalHeight
+        const scale = Math.min(1, maxWidth / (swap ? H : W))
+        const outW = Math.round((swap ? H : W) * scale)
+        const outH = Math.round((swap ? W : H) * scale)
+        const canvas = document.createElement('canvas')
+        canvas.width = outW; canvas.height = outH
+        const ctx = canvas.getContext('2d')
+        ctx.save()
+        switch (orientation) {
+          case 3: ctx.translate(outW, outH); ctx.rotate(Math.PI);      break
+          case 6: ctx.translate(outW, 0);   ctx.rotate(Math.PI / 2);  break
+          case 8: ctx.translate(0, outH);   ctx.rotate(-Math.PI / 2); break
         }
-        img.src = e.target.result
+        ctx.drawImage(img, 0, 0, W * scale, H * scale)
+        ctx.restore()
+        resolve(canvas.toDataURL('image/jpeg', 0.95))
       }
-      reader.readAsDataURL(file)
+      img.src = dataUrl
     })
   }
 }
