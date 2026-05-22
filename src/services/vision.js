@@ -1,85 +1,25 @@
 const VISION_API_KEY = import.meta.env.VITE_GOOGLE_VISION_KEY
 
 
+// Chrome 81+: naturalWidth/Height = EXIF 반영 치수, drawImage = EXIF 자동 회전 적용
 export async function compressImage(file, maxWidth = 4000) {
-  // 1단계: EXIF 방향 코드 읽기
-  const dataUrl = await new Promise((res, rej) => {
-    const r = new FileReader()
-    r.onload = e => res(e.target.result)
-    r.onerror = rej
-    r.readAsDataURL(file)
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const w = img.naturalWidth
+      const h = img.naturalHeight
+      const scale = Math.min(1, maxWidth / Math.max(w, h))
+      const canvas = document.createElement('canvas')
+      canvas.width  = Math.round(w * scale)
+      canvas.height = Math.round(h * scale)
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+      resolve(canvas.toDataURL('image/jpeg', 0.95))
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('이미지 로드 실패')) }
+    img.src = url
   })
-  const orientation = getExifOrientation(dataUrl)
-  const swap = [5, 6, 7, 8].includes(orientation)
-
-  // 2단계: imageOrientation:'none' → 브라우저 자동 회전 완전 차단 후 수동 적용
-  try {
-    const bmp = await createImageBitmap(file, { imageOrientation: 'none' })
-    const W = bmp.width, H = bmp.height
-    const scale = Math.min(1, maxWidth / (swap ? H : W))
-    const outW = Math.round((swap ? H : W) * scale)
-    const outH = Math.round((swap ? W : H) * scale)
-    const canvas = document.createElement('canvas')
-    canvas.width = outW; canvas.height = outH
-    const ctx = canvas.getContext('2d')
-    ctx.save()
-    switch (orientation) {
-      case 3: ctx.translate(outW, outH); ctx.rotate(Math.PI);      break
-      case 6: ctx.translate(outW, 0);   ctx.rotate(Math.PI / 2);  break
-      case 8: ctx.translate(0, outH);   ctx.rotate(-Math.PI / 2); break
-    }
-    ctx.drawImage(bmp, 0, 0, W * scale, H * scale)
-    ctx.restore()
-    bmp.close?.()
-    return canvas.toDataURL('image/jpeg', 0.95)
-  } catch {
-    // 구형 브라우저 폴백
-    return new Promise((resolve) => {
-      const img = new Image()
-      img.onload = () => {
-        const W = img.naturalWidth, H = img.naturalHeight
-        const scale = Math.min(1, maxWidth / (swap ? H : W))
-        const outW = Math.round((swap ? H : W) * scale)
-        const outH = Math.round((swap ? W : H) * scale)
-        const canvas = document.createElement('canvas')
-        canvas.width = outW; canvas.height = outH
-        const ctx = canvas.getContext('2d')
-        ctx.save()
-        switch (orientation) {
-          case 3: ctx.translate(outW, outH); ctx.rotate(Math.PI);      break
-          case 6: ctx.translate(outW, 0);   ctx.rotate(Math.PI / 2);  break
-          case 8: ctx.translate(0, outH);   ctx.rotate(-Math.PI / 2); break
-        }
-        ctx.drawImage(img, 0, 0, W * scale, H * scale)
-        ctx.restore()
-        resolve(canvas.toDataURL('image/jpeg', 0.95))
-      }
-      img.src = dataUrl
-    })
-  }
-}
-
-function getExifOrientation(dataUrl) {
-  try {
-    const bin = atob(dataUrl.split(',')[1].slice(0, 2048))
-    const view = new DataView(new Uint8Array([...bin].map(c => c.charCodeAt(0))).buffer)
-    if (view.getUint16(0) !== 0xFFD8) return 1
-    let off = 2
-    while (off < view.byteLength - 4) {
-      if (view.getUint16(off) === 0xFFE1) {
-        const little = view.getUint16(off + 10) === 0x4949
-        const ifd = view.getUint32(off + 14, little)
-        const n   = view.getUint16(off + 10 + ifd, little)
-        for (let i = 0; i < n; i++) {
-          if (view.getUint16(off + 10 + ifd + 2 + i * 12, little) === 0x0112)
-            return view.getUint16(off + 10 + ifd + 2 + i * 12 + 8, little)
-        }
-        break
-      }
-      off += 2 + view.getUint16(off + 2)
-    }
-  } catch {}
-  return 1
 }
 
 export async function analyzeReceipt(imageDataUrl, onProgress) {
