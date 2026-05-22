@@ -222,9 +222,10 @@ async function ensureMonthSheet(token, spreadsheetId, sheetName) {
 
 // ── Drive ─────────────────────────────────────────────────────────────────
 
-export async function uploadReceiptImage(token, base64DataUrl, receipt) {
+export async function uploadReceiptImage(token, imageSource, receipt) {
   const folderId = await getOrCreateReceiptFolder(token, receipt.date)
-  const blob = dataUrlToBlob(base64DataUrl)
+  // File/Blob이면 원본 그대로, base64 문자열이면 변환
+  const blob = (imageSource instanceof Blob) ? imageSource : dataUrlToBlob(imageSource)
   const filename = `${receipt.date}_${receipt.merchant}_${receipt.amount}원.jpg`
 
   const form = new FormData()
